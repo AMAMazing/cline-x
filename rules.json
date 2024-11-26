@@ -1,0 +1,18 @@
+{
+  "id": 1,
+  "priority": 1,
+  "action": {
+    "type": "modifyHeaders",
+    "requestHeaders": [
+      {
+        "header": "Content-Type",
+        "operation": "set",
+        "value": "application/json"
+      }
+    ]
+  },
+  "condition": {
+    "urlFilter": "http://localhost:3000/chat/completions",
+    "resourceTypes": ["xmlhttprequest"]
+  }
+}
