@@ -58,18 +58,27 @@ def handle_claude_interaction(prompt):
 
     # Get the current time for the log entry timestamp
     current_time = time.strftime('%Y-%m-%d %H:%M:%S')
-    headers_log = f"{current_time} - INFO - Headers: {dict(request.headers)}\n"
+    headers_log = f"{current_time} - {dict(request.headers)}\n"
     headers_log += f"{current_time} - INFO - Time since last request: {time.time() - last_request_time} seconds\n"
     headers_log += f"{current_time} - INFO - Request data: {request.get_json()}"
     
     set_clipboard(headers_log)
     pyautogui.hotkey('ctrl','v')
+
+    set_clipboard('Following the rules of the pasted lines i gave you: ')
+    pyautogui.hotkey('ctrl','v')
+
     set_clipboard(prompt)
     pyautogui.hotkey('ctrl','v')
-    #pyautogui.press('enter')
-    # TODO: Add response capture logic here
-    time.sleep(10)
-    return "Response placeholder"
+    
+    optimiseWait('submit')
+
+    optimiseWait('copy')
+    
+    win32clipboard.OpenClipboard()
+    copied_text = win32clipboard.GetClipboardData()
+    win32clipboard.CloseClipboard()
+    return copied_text
 
 @app.route('/', methods=['GET'])
 def home():
@@ -96,6 +105,8 @@ def chat_completions():
                 'error': {
                     'message': f'Please wait {MIN_REQUEST_INTERVAL} seconds between requests',
                     'type': 'rate_limit',
+                    'param': None,
+                    'code': 429
                 }
             }), 429
             
@@ -105,8 +116,38 @@ def chat_completions():
         data = request.get_json()
         logger.info(f"Request data: {data}")
         
+        if not data or 'messages' not in data:
+            return jsonify({
+                'error': {
+                    'message': 'Invalid request format',
+                    'type': 'invalid_request_error',
+                    'param': 'messages',
+                    'code': 400
+                }
+            }), 400
+
         messages = data['messages']
+        if not messages or not isinstance(messages, list):
+            return jsonify({
+                'error': {
+                    'message': 'Messages must be a non-empty array',
+                    'type': 'invalid_request_error',
+                    'param': 'messages',
+                    'code': 400
+                }
+            }), 400
+
         last_message = messages[-1]
+        if not isinstance(last_message, dict) or 'content' not in last_message:
+            return jsonify({
+                'error': {
+                    'message': 'Invalid message format',
+                    'type': 'invalid_request_error',
+                    'param': 'messages',
+                    'code': 400
+                }
+            }), 400
+
         prompt = last_message['content']
         request_id = str(int(time.time()))
         
@@ -130,9 +171,9 @@ def chat_completions():
                 'finish_reason': 'stop'
             }],
             'usage': {
-                'prompt_tokens': 1,
-                'completion_tokens': 1,
-                'total_tokens': 2
+                'prompt_tokens': len(prompt),
+                'completion_tokens': len(response),
+                'total_tokens': len(prompt) + len(response)
             }
         })
     
@@ -143,7 +184,7 @@ def chat_completions():
                 'message': str(e),
                 'type': 'server_error',
                 'param': None,
-                'code': None
+                'code': 500
             }
         }), 500
 
