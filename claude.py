@@ -1,10 +1,18 @@
 from flask import Flask, jsonify, request
 import webbrowser
+import win32clipboard
+import win32con
 import time
 import os
 from optimisewait import optimiseWait, set_autopath
 import pyautogui
 import logging
+
+def set_clipboard(text):
+    win32clipboard.OpenClipboard()
+    win32clipboard.EmptyClipboard()
+    win32clipboard.SetClipboardText(text)
+    win32clipboard.CloseClipboard()
 
 # Set up logging to show everything in terminal
 logging.basicConfig(
@@ -40,24 +48,20 @@ def handle_claude_interaction(prompt):
     
     # Wait for either claudenew or submit to appear
     logger.info("Waiting for Claude interface elements...")
-    result = optimiseWait(['claudenew', 'submit'], clicks=[1,1], dontwait=True)
+    result = optimiseWait(['claudenew', 'submit'], clicks=[1], xoff=[0,-100])
     logger.info(f"OptimiseWait result: {result}")
     
-    if result['found']:
-        logger.info(f"Found {result['image']}, proceeding with text input")
-        time.sleep(1)  # Wait for any animations
+    if result['image'] == 'submit':
+        time.sleep(0.5)
         pyautogui.hotkey('ctrl', 'a')
         pyautogui.press('delete')
-        time.sleep(1)  # Small delay after clearing
-        logger.info("Typing prompt...")
-        pyautogui.typewrite(prompt)
-        #pyautogui.press('enter')
-        # TODO: Add response capture logic here
-        time.sleep(10)
-        return "Response placeholder"
-    
-    logger.warning("Failed to find interface elements")
-    return "Failed to interact with Claude"
+
+    set_clipboard(prompt)
+    pyautogui.hotkey('ctrl','v')
+    #pyautogui.press('enter')
+    # TODO: Add response capture logic here
+    time.sleep(10)
+    return "Response placeholder"
 
 @app.route('/', methods=['GET'])
 def home():
