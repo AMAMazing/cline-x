@@ -1,19 +1,140 @@
+from flask import Flask, jsonify, request
 import webbrowser
 import time
 import os
-from cf_functions_vCL import optimiseWait
+from optimisewait import optimiseWait, set_autopath
+import pyautogui
+import logging
 
+# Set up logging to show everything in terminal
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
+app = Flask(__name__)
+last_request_time = 0
+MIN_REQUEST_INTERVAL = 5  # Minimum seconds between requests
+
+set_autopath(r"D:\cline-x-claudeweb\images")
 url = 'https://claude.ai/new'
-webbrowser.open(url)
 
-# Wait for browser to start loading
-time.sleep(2)
+def handle_claude_interaction(prompt):
+    """Only called when we receive an actual API request"""
+    logger.info(f"Starting Claude interaction with prompt: {prompt}")
+    
+    # Extract text content from prompt if it's a list of dictionaries
+    if isinstance(prompt, list):
+        prompt_text = ""
+        for item in prompt:
+            if isinstance(item, dict) and 'text' in item:
+                prompt_text += item['text'] + "\n"
+        prompt = prompt_text.strip()
+    
+    # Open Claude in browser
+    logger.info("Opening Claude in browser")
+    webbrowser.open(url)
+    time.sleep(2)  # Wait for browser to open
+    
+    # Wait for either claudenew or submit to appear
+    logger.info("Waiting for Claude interface elements...")
+    result = optimiseWait(['claudenew', 'submit'], clicks=[1,1], dontwait=True)
+    logger.info(f"OptimiseWait result: {result}")
+    
+    if result['found']:
+        logger.info(f"Found {result['image']}, proceeding with text input")
+        time.sleep(1)  # Wait for any animations
+        pyautogui.hotkey('ctrl', 'a')
+        pyautogui.press('delete')
+        time.sleep(1)  # Small delay after clearing
+        logger.info("Typing prompt...")
+        pyautogui.typewrite(prompt)
+        #pyautogui.press('enter')
+        # TODO: Add response capture logic here
+        time.sleep(10)
+        return "Response placeholder"
+    
+    logger.warning("Failed to find interface elements")
+    return "Failed to interact with Claude"
 
-print("Starting search for image...")
-print(f"Current directory: {os.getcwd()}")
-image_path = r"D:\cline-x-claudeweb\images\claudenew.png"
-print(f"Looking for image at: {image_path}")
-print(f"File exists: {os.path.exists(image_path)}")
+@app.route('/', methods=['GET'])
+def home():
+    logger.info(f"GET request to / from {request.remote_addr}")
+    return "Claude API Bridge"
 
-# Now use optimiseWait which will keep trying until it finds the image
-optimiseWait('claudenew', autopath=r"D:\cline-x-claudeweb\images")
+@app.route('/chat/completions', methods=['POST'])
+def chat_completions():
+    global last_request_time
+    
+    try:
+        # Log request details
+        logger.info(f"POST request to /chat/completions from {request.remote_addr}")
+        logger.info(f"Headers: {dict(request.headers)}")
+        
+        # Rate limiting
+        current_time = time.time()
+        time_since_last = current_time - last_request_time
+        logger.info(f"Time since last request: {time_since_last} seconds")
+        
+        if time_since_last < MIN_REQUEST_INTERVAL:
+            logger.warning(f"Rate limit hit. Only {time_since_last} seconds since last request")
+            return jsonify({
+                'error': {
+                    'message': f'Please wait {MIN_REQUEST_INTERVAL} seconds between requests',
+                    'type': 'rate_limit',
+                }
+            }), 429
+            
+        last_request_time = current_time
+        
+        # Extract the message
+        data = request.get_json()
+        logger.info(f"Request data: {data}")
+        
+        messages = data['messages']
+        last_message = messages[-1]
+        prompt = last_message['content']
+        request_id = str(int(time.time()))
+        
+        logger.info(f"Processing request {request_id} with prompt: {prompt}")
+        
+        # Handle the Claude interaction
+        response = handle_claude_interaction(prompt)
+        logger.info(f"Got response for request {request_id}: {response}")
+        
+        return jsonify({
+            'id': f'chatcmpl-{request_id}',
+            'object': 'chat.completion',
+            'created': int(time.time()),
+            'model': 'gpt-3.5-turbo-0613',
+            'choices': [{
+                'index': 0,
+                'message': {
+                    'role': 'assistant',
+                    'content': response
+                },
+                'finish_reason': 'stop'
+            }],
+            'usage': {
+                'prompt_tokens': 1,
+                'completion_tokens': 1,
+                'total_tokens': 2
+            }
+        })
+    
+    except Exception as e:
+        logger.error(f"Error processing request: {str(e)}", exc_info=True)
+        return jsonify({
+            'error': {
+                'message': str(e),
+                'type': 'server_error',
+                'param': None,
+                'code': None
+            }
+        }), 500
+
+if __name__ == '__main__':
+    logger.info("Starting Claude API Bridge server on port 3000")
+    app.run(port=3000)
