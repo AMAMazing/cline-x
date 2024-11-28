@@ -1,12 +1,13 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 import webbrowser
 import win32clipboard
-import win32con
 import time
 import os
 from optimisewait import optimiseWait, set_autopath
 import pyautogui
 import logging
+import json
+from typing import Union, List, Dict, Optional
 
 def set_clipboard(text):
     win32clipboard.OpenClipboard()
@@ -14,7 +15,6 @@ def set_clipboard(text):
     win32clipboard.SetClipboardText(text)
     win32clipboard.CloseClipboard()
 
-# Set up logging to show everything in terminal
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -24,29 +24,30 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 last_request_time = 0
-MIN_REQUEST_INTERVAL = 5  # Minimum seconds between requests
+MIN_REQUEST_INTERVAL = 5
 
 set_autopath(r"D:\cline-x-claudeweb\images")
 url = 'https://claude.ai/new'
 
+def get_content_text(content: Union[str, List[Dict[str, str]], Dict[str, str]]) -> str:
+    """Extract text from different content formats"""
+    if isinstance(content, str):
+        return content
+    elif isinstance(content, list):
+        return " ".join(item["text"] for item in content if item.get("type") == "text")
+    elif isinstance(content, dict):
+        return content.get("text", "")
+    return ""
+
 def handle_claude_interaction(prompt):
-    """Only called when we receive an actual API request"""
     logger.info(f"Starting Claude interaction with prompt: {prompt}")
-    
-    # Extract text content from prompt if it's a list of dictionaries
-    if isinstance(prompt, list):
-        prompt_text = ""
-        for item in prompt:
-            if isinstance(item, dict) and 'text' in item:
-                prompt_text += item['text'] + "\n"
-        prompt = prompt_text.strip()
     
     # Open Claude in browser
     logger.info("Opening Claude in browser")
     webbrowser.open(url)
-    time.sleep(2)  # Wait for browser to open
+    time.sleep(2)
     
-    # Wait for either claudenew or submit to appear
+    # Wait for interface elements
     logger.info("Waiting for Claude interface elements...")
     result = optimiseWait(['claudenew', 'submit'], clicks=[1], xoff=[0,-100])
     logger.info(f"OptimiseWait result: {result}")
@@ -56,112 +57,106 @@ def handle_claude_interaction(prompt):
         pyautogui.hotkey('ctrl', 'a')
         pyautogui.press('delete')
 
-    # Get the current time for the log entry timestamp
     current_time = time.strftime('%Y-%m-%d %H:%M:%S')
     headers_log = f"{current_time} - {dict(request.headers)}\n"
     headers_log += f"{current_time} - INFO - Time since last request: {time.time() - last_request_time} seconds\n"
     headers_log += f"{current_time} - INFO - Request data: {request.get_json()}"
     
+    # Send the prompt to Claude
     set_clipboard(headers_log)
     pyautogui.hotkey('ctrl','v')
 
-    set_clipboard('Following the rules of the pasted lines i gave you: ')
+    set_clipboard('Please follow these rules: For each response, you must use one of the available tools formatted in proper XML tags. Tools include attempt_completion, ask_followup_question, read_file, write_to_file, search_files, list_files, execute_command, and list_code_definition_names. Do not respond conversationally - only use tool commands: ')
     pyautogui.hotkey('ctrl','v')
-
+    
     set_clipboard(prompt)
     pyautogui.hotkey('ctrl','v')
     
     optimiseWait('submit')
-
     optimiseWait('copy')
     
+    # Get Claude's response
     win32clipboard.OpenClipboard()
-    copied_text = win32clipboard.GetClipboardData()
+    response = win32clipboard.GetClipboardData()
     win32clipboard.CloseClipboard()
-    return copied_text
-
-@app.route('/', methods=['GET'])
-def home():
-    logger.info(f"GET request to / from {request.remote_addr}")
-    return "Claude API Bridge"
+    return response
 
 @app.route('/chat/completions', methods=['POST'])
 def chat_completions():
-    global last_request_time
-    
     try:
-        # Log request details
-        logger.info(f"POST request to /chat/completions from {request.remote_addr}")
-        logger.info(f"Headers: {dict(request.headers)}")
-        
-        # Rate limiting
-        current_time = time.time()
-        time_since_last = current_time - last_request_time
-        logger.info(f"Time since last request: {time_since_last} seconds")
-        
-        if time_since_last < MIN_REQUEST_INTERVAL:
-            logger.warning(f"Rate limit hit. Only {time_since_last} seconds since last request")
-            return jsonify({
-                'error': {
-                    'message': f'Please wait {MIN_REQUEST_INTERVAL} seconds between requests',
-                    'type': 'rate_limit',
-                    'param': None,
-                    'code': 429
-                }
-            }), 429
-            
-        last_request_time = current_time
-        
-        # Extract the message
         data = request.get_json()
         logger.info(f"Request data: {data}")
         
         if not data or 'messages' not in data:
-            return jsonify({
-                'error': {
-                    'message': 'Invalid request format',
-                    'type': 'invalid_request_error',
-                    'param': 'messages',
-                    'code': 400
-                }
-            }), 400
+            return jsonify({'error': {'message': 'Invalid request format'}}), 400
 
-        messages = data['messages']
-        if not messages or not isinstance(messages, list):
-            return jsonify({
-                'error': {
-                    'message': 'Messages must be a non-empty array',
-                    'type': 'invalid_request_error',
-                    'param': 'messages',
-                    'code': 400
-                }
-            }), 400
-
-        last_message = messages[-1]
-        if not isinstance(last_message, dict) or 'content' not in last_message:
-            return jsonify({
-                'error': {
-                    'message': 'Invalid message format',
-                    'type': 'invalid_request_error',
-                    'param': 'messages',
-                    'code': 400
-                }
-            }), 400
-
-        prompt = last_message['content']
-        request_id = str(int(time.time()))
+        # Get the last message's content, handling complex formats
+        last_message = data['messages'][-1]
+        prompt = get_content_text(last_message.get('content', ''))
         
-        logger.info(f"Processing request {request_id} with prompt: {prompt}")
+        request_id = str(int(time.time()))
+        is_streaming = data.get('stream', False)
         
         # Handle the Claude interaction
         response = handle_claude_interaction(prompt)
-        logger.info(f"Got response for request {request_id}: {response}")
+        
+        if is_streaming:
+            def generate():
+                response_id = f"chatcmpl-{request_id}"
+                
+                # Send role first
+                chunk = {
+                    "id": response_id,
+                    "object": "chat.completion.chunk",
+                    "created": int(time.time()),
+                    "model": "gpt-3.5-turbo",
+                    "choices": [{
+                        "index": 0,
+                        "delta": {"role": "assistant"},
+                        "finish_reason": None
+                    }]
+                }
+                yield f"data: {json.dumps(chunk)}\n\n"
+                
+                # Stream each word
+                words = response.split()
+                for word in words:
+                    chunk = {
+                        "id": response_id,
+                        "object": "chat.completion.chunk",
+                        "created": int(time.time()),
+                        "model": "gpt-3.5-turbo",
+                        "choices": [{
+                            "index": 0,
+                            "delta": {"content": word + " "},
+                            "finish_reason": None
+                        }]
+                    }
+                    yield f"data: {json.dumps(chunk)}\n\n"
+                    time.sleep(0.1)
+                
+                # End stream
+                chunk = {
+                    "id": response_id,
+                    "object": "chat.completion.chunk",
+                    "created": int(time.time()),
+                    "model": "gpt-3.5-turbo",
+                    "choices": [{
+                        "index": 0,
+                        "delta": {},
+                        "finish_reason": "stop"
+                    }]
+                }
+                yield f"data: {json.dumps(chunk)}\n\n"
+                yield "data: [DONE]\n\n"
+            
+            return Response(generate(), mimetype='text/event-stream')
         
         return jsonify({
             'id': f'chatcmpl-{request_id}',
             'object': 'chat.completion',
             'created': int(time.time()),
-            'model': 'gpt-3.5-turbo-0613',
+            'model': 'gpt-3.5-turbo',
             'choices': [{
                 'index': 0,
                 'message': {
@@ -179,14 +174,7 @@ def chat_completions():
     
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}", exc_info=True)
-        return jsonify({
-            'error': {
-                'message': str(e),
-                'type': 'server_error',
-                'param': None,
-                'code': 500
-            }
-        }), 500
+        return jsonify({'error': {'message': str(e)}}), 500
 
 if __name__ == '__main__':
     logger.info("Starting Claude API Bridge server on port 3000")
