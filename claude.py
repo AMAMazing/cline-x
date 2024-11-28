@@ -56,6 +56,14 @@ def handle_claude_interaction(prompt):
         pyautogui.hotkey('ctrl', 'a')
         pyautogui.press('delete')
 
+    # Get the current time for the log entry timestamp
+    current_time = time.strftime('%Y-%m-%d %H:%M:%S')
+    headers_log = f"{current_time} - INFO - Headers: {dict(request.headers)}\n"
+    headers_log += f"{current_time} - INFO - Time since last request: {time.time() - last_request_time} seconds\n"
+    headers_log += f"{current_time} - INFO - Request data: {request.get_json()}"
+    
+    set_clipboard(headers_log)
+    pyautogui.hotkey('ctrl','v')
     set_clipboard(prompt)
     pyautogui.hotkey('ctrl','v')
     #pyautogui.press('enter')
