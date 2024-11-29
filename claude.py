@@ -79,7 +79,15 @@ def handle_claude_interaction(prompt):
     win32clipboard.OpenClipboard()
     response = win32clipboard.GetClipboardData()
     win32clipboard.CloseClipboard()
+    
+    # Clean up the response
+    response = response.replace('\\n', '\n')
     return response
+
+@app.route('/', methods=['GET'])
+def home():
+    logger.info(f"GET request to / from {request.remote_addr}")
+    return "Claude API Bridge"
 
 @app.route('/chat/completions', methods=['POST'])
 def chat_completions():
@@ -118,9 +126,9 @@ def chat_completions():
                 }
                 yield f"data: {json.dumps(chunk)}\n\n"
                 
-                # Stream each word
-                words = response.split()
-                for word in words:
+                # Stream line by line for XML and code content
+                lines = response.splitlines()
+                for line in lines:
                     chunk = {
                         "id": response_id,
                         "object": "chat.completion.chunk",
@@ -128,7 +136,7 @@ def chat_completions():
                         "model": "gpt-3.5-turbo",
                         "choices": [{
                             "index": 0,
-                            "delta": {"content": word + " "},
+                            "delta": {"content": line + "\n"},
                             "finish_reason": None
                         }]
                     }
@@ -178,4 +186,4 @@ def chat_completions():
 
 if __name__ == '__main__':
     logger.info("Starting Claude API Bridge server on port 3000")
-    app.run(port=3000)
+    app.run(host="0.0.0.0", port=3000)
