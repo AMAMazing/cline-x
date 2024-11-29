@@ -80,9 +80,24 @@ def handle_claude_interaction(prompt):
     response = win32clipboard.GetClipboardData()
     win32clipboard.CloseClipboard()
     
-    # Clean up the response
-    response = response.replace('\\n', '\n')
-    return response
+    # Clean up the response - preserve \n in code blocks
+    cleaned_response = []
+    in_code_block = False
+    xml_tags = ['<write_to_file>', '</write_to_file>', '<content>', '</content>']
+    
+    for line in response.splitlines():
+        if any(tag in line for tag in xml_tags):
+            in_code_block = '<content>' in line or (in_code_block and '</content>' not in line)
+            cleaned_response.append(line)
+        else:
+            if in_code_block:
+                # Preserve line as-is in code blocks
+                cleaned_response.append(line)
+            else:
+                # Replace escaped newlines outside code blocks
+                cleaned_response.append(line.replace('\\n', '\n'))
+    
+    return '\n'.join(cleaned_response)
 
 @app.route('/', methods=['GET'])
 def home():
