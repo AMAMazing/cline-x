@@ -3,7 +3,7 @@ import webbrowser
 import win32clipboard
 import time
 import os
-from optimisewaito import optimiseWait, set_autopath
+from optimisewaito import optimiseWait, set_autopath, set_altpath
 import pyautogui
 import logging
 import json
@@ -26,7 +26,8 @@ app = Flask(__name__)
 last_request_time = 0
 MIN_REQUEST_INTERVAL = 5
 
-set_autopath(r"D:\cline-x-claudeweb\images", resolution='1440p')
+set_autopath(r"D:\cline-x-claudeweb\images")
+set_altpath(r"D:\cline-x-claudeweb\images\alt1440")
 url = 'https://claude.ai/new'
 
 def get_content_text(content: Union[str, List[Dict[str, str]], Dict[str, str]]) -> str:
