@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 last_request_time = 0
-MIN_REQUEST_INTERVAL = 5
+MIN_REQUEST_INTERVAL = 5  # Minimum time between new tab creation
 
 set_autopath(r"D:\cline-x-claudeweb\images")
 url = 'https://claude.ai/new'
