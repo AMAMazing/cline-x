@@ -12,7 +12,11 @@ from typing import Union, List, Dict, Optional
 def set_clipboard(text):
     win32clipboard.OpenClipboard()
     win32clipboard.EmptyClipboard()
-    win32clipboard.SetClipboardText(text)
+    try:
+        win32clipboard.SetClipboardText(str(text))
+    except Exception:
+        # Fallback for Unicode characters
+        win32clipboard.SetClipboardData(win32clipboard.CF_UNICODETEXT, str(text).encode('utf-16le'))
     win32clipboard.CloseClipboard()
 
 logging.basicConfig(
@@ -40,11 +44,21 @@ def get_content_text(content: Union[str, List[Dict[str, str]], Dict[str, str]]) 
     return ""
 
 def handle_claude_interaction(prompt):
+    global last_request_time
+    
     logger.info(f"Starting Claude interaction with prompt: {prompt}")
     
-    # Open Claude in browser
+    # Check if enough time has passed since last request
+    current_time = time.time()
+    time_since_last = current_time - last_request_time
+    
+    if time_since_last < MIN_REQUEST_INTERVAL:
+        time.sleep(MIN_REQUEST_INTERVAL - time_since_last)
+    
+    # Open Claude in browser and update last request time
     logger.info("Opening Claude in browser")
     webbrowser.open(url)
+    last_request_time = time.time()
     time.sleep(2)
     
     # Wait for interface elements
@@ -59,7 +73,7 @@ def handle_claude_interaction(prompt):
 
     current_time = time.strftime('%Y-%m-%d %H:%M:%S')
     headers_log = f"{current_time} - {dict(request.headers)}\n"
-    headers_log += f"{current_time} - INFO - Time since last request: {time.time() - last_request_time} seconds\n"
+    headers_log += f"{current_time} - INFO - Time since last request: {time_since_last} seconds\n"
     headers_log += f"{current_time} - INFO - Request data: {request.get_json()}"
     
     # Send the prompt to Claude
