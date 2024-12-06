@@ -88,6 +88,8 @@ def handle_claude_interaction(prompt):
     
     optimiseWait('submit')
     optimiseWait('copy')
+
+    pyautogui.hotkey('alt','tab')
     
     # Get Claude's response
     win32clipboard.OpenClipboard()

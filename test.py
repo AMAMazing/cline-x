@@ -3,7 +3,7 @@ import webbrowser
 import win32clipboard
 import time
 import os
-from optimisewaito import optimiseWait, set_autopath, set_altpath
+from optimisewait import optimiseWait, set_autopath, set_altpath
 import pyautogui
 import logging
 import json
@@ -76,6 +76,8 @@ def handle_claude_interaction(prompt):
     optimiseWait('submit')
     optimiseWait('copy')
     
+    pyautogui.hotkey('alt','tab')
+
     # Get Claude's response
     win32clipboard.OpenClipboard()
     response = win32clipboard.GetClipboardData()
