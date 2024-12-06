@@ -1,83 +1,134 @@
-# Claude API Bridge
+# Cline X Claude.ai (Web interface)
 
-Bridge between VSCode Cline extension and Claude web interface to reduce API costs.
+A Python-based API bridge that enables Cline (VS Code Extension) to interact with Claude.ai web interface, providing OpenAI-compatible API endpoints for seamless integration.
 
-## How It Works
+## Overview
 
-1. Cline sends request to local server
-2. Server injects script into page
-3. Script communicates with Chrome extension
-4. Extension automates Claude web interface
-5. Response flows back through the chain
+This project creates a Flask server that acts as a middleware between Cline and Claude.ai, translating API requests into web interactions. It simulates an OpenAI-compatible API endpoint, allowing Cline to use Claude.ai as if it were communicating with the OpenAI API.
 
-## Setup
+## Features
 
-1. **Install Chrome Extension:**
-   - Open Chrome and go to `chrome://extensions/`
-   - Enable "Developer mode" in top right
-   - Click "Load unpacked" and select this folder
-   - Copy your extension ID (shown under the extension name)
-   - Paste your extension ID in `config.json`
+- OpenAI-compatible API endpoints
+- Automated browser interaction with Claude.ai
+- Request rate limiting and management
+- Clipboard-based data transfer
+- Streaming response support
+- Comprehensive error handling and logging
+- Support for various content formats
 
-2. **Setup Local Server:**
-   ```bash
-   # Install dependencies
-   npm install
-   
-   # Start server
-   npm start
-   ```
-   Server will run at http://localhost:3000
+## Prerequisites
 
-3. **Configure Cline in VSCode:**
-   - Open VSCode settings (Ctrl+,)
-   - Search for "Cline"
-   - Set these settings:
-   ```json
-   {
-     "cline.openaiApiBase": "http://localhost:3000",
-     "cline.openaiApiKey": "any-value",
-     "cline.provider": "openai"
-   }
-   ```
+- Python 3.6+
+- Windows OS (due to win32clipboard dependency)
+- Chrome/Firefox browser installed
+- Active Claude.ai account with logged-in session
 
-## Components
+Required Python packages:
+```
+flask
+pywin32
+pyautogui
+optimisewait
+```
 
-1. **Server (server.js)**
-   - Provides OpenAI-compatible API endpoint
-   - Injects communication script into page
-   - Handles response routing
+## Installation
 
-2. **Extension**
-   - **background.js**: Manages tab creation/cleanup
-   - **content.js**: Automates Claude interface
-   - **manifest.json**: Extension configuration
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/claude-cline-bridge.git
+cd claude-cline-bridge
+```
 
-3. **Communication Flow**
-   ```
-   Cline -> Server -> Page Script -> Extension -> Claude -> Extension -> Server -> Cline
-   ```
+2. Install dependencies:
+```bash
+pip install flask pywin32 pyautogui
+```
 
-## Requirements
+3. Set up the image directory structure (required for GUI automation):
+```
+images/
+├── claudenew.png
+├── copy.png
+├── submit.png
+└── alt1440/
+    ├── claudenew.png
+    ├── copy.png
+    └── submit.png
+```
 
-- Node.js installed
-- Chrome browser
-- Logged into Claude at https://claude.ai
-- VSCode with Cline extension
+## Configuration
 
-## Troubleshooting
+1. Update the image paths in `claude.py`:
+```python
+set_autopath(r"path/to/your/images")
+set_altpath(r"path/to/your/images/alt1440")
+```
 
-1. Ensure you're logged into Claude
-2. Check extension ID in config.json matches
-3. Verify server is running
-4. Check Chrome DevTools console for errors
-5. Ensure all components are properly connected:
-   - Server running at http://localhost:3000
-   - Extension loaded and enabled
-   - Cline settings configured correctly
+2. Adjust the `MIN_REQUEST_INTERVAL` (default: 5 seconds) if needed to match your rate limiting requirements.
+
+## Usage
+
+1. Start the server:
+```bash
+python claude.py
+```
+
+2. Configure Cline to use the local API endpoint:
+   - Open Cline settings in VS Code
+   - Select "OpenAI Compatible" as the API provider
+   - Set Base URL to: `http://localhost:3000`
+   - Set API Key to any non-empty value (e.g., "any-value")
+   - Set Model ID to "gpt-3.5-turbo"
+
+
+The server will now:
+1. Receive API requests from Cline
+2. Open Claude.ai in a new browser tab
+3. Input the prompt and retrieve the response
+4. Return formatted response to Cline
+
+## Technical Details
+
+### API Endpoint
+
+- POST `/chat/completions`: Main endpoint for chat completions
+- GET `/`: Health check endpoint
+
+### Key Components
+
+- **Flask Server**: Handles HTTP requests and provides API endpoints
+- **Browser Automation**: Uses PyAutoGUI and optimisewait for GUI interaction
+- **Clipboard Management**: Handles data transfer between the server and Claude.ai
+- **Response Processing**: Cleans and formats Claude's responses to match OpenAI API structure
+
+### Rate Limiting
+
+The server implements a simple rate limiting mechanism:
+- Minimum 5-second interval between requests
+- Automatic request queueing if interval not met
+
+### Error Handling
+
+- Comprehensive logging system
+- Graceful error handling for API requests
+- Unicode text handling for clipboard operations
 
 ## Limitations
 
-- Requires keeping Claude web logged in
-- May be slower than direct API
-- Could break if Claude web interface changes
+- Windows-only support (due to win32clipboard)
+- Requires active browser window
+- Depends on GUI automation (sensitive to UI changes)
+- Requires logged-in Claude.ai session
+- Rate-limited by design
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+
+## License
+
+[MIT](LICENSE)
+
+## Disclaimer
+
+This project is not officially affiliated with Anthropic, OpenAI, or Cline. Use at your own discretion and in accordance with respective terms of service.
