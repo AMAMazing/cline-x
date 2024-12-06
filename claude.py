@@ -90,6 +90,10 @@ def handle_claude_interaction(prompt):
     optimiseWait('submit')
     optimiseWait('copy')
 
+    pyautogui.hotkey('ctrl','w')
+
+    time.sleep(1)
+
     pyautogui.hotkey('alt','tab')
     
     # Get Claude's response
