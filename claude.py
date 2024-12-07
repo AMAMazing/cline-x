@@ -2,11 +2,12 @@ from flask import Flask, jsonify, request, Response
 import webbrowser
 import win32clipboard
 import time
-import os
+import os   
 from optimisewait import optimiseWait, set_autopath, set_altpath
 import pyautogui
 import logging
 import json
+from threading import Timer
 from typing import Union, List, Dict, Optional
 
 def read_config(filename="config.txt"):
@@ -31,6 +32,9 @@ def set_clipboard(text):
         # Fallback for Unicode characters
         win32clipboard.SetClipboardData(win32clipboard.CF_UNICODETEXT, str(text).encode('utf-16le'))
     win32clipboard.CloseClipboard()
+
+def handle_save_dialog():
+    optimiseWait(['save', 'runcommand','startnewtask'],clicks=[1,1,0],altpath=None)
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -129,8 +133,17 @@ def handle_claude_interaction(prompt):
             else:
                 # Replace escaped newlines outside code blocks
                 cleaned_response.append(line.replace('\\n', '\n'))
+
+    final_response = '\n'.join(cleaned_response)
     
-    return '\n'.join(cleaned_response)
+    # Schedule the save dialog to be handled after response is returned
+    if autorun == 'True':
+        print('TRUE')
+        Timer(0.5, handle_save_dialog).start()
+    else:
+        print('false')
+    
+    return final_response
 
 @app.route('/', methods=['GET'])
 def home():
