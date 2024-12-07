@@ -9,6 +9,19 @@ import logging
 import json
 from typing import Union, List, Dict, Optional
 
+def read_config(filename="config.txt"):
+    config = {}
+    with open(filename, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if '=' in line:  # Only process lines that contain an '='
+                key, value = line.split('=', 1)  # Split only at the first '='
+                config[key.strip()] = value.strip().strip('"')
+    return config
+
+config = read_config()
+autorun = config.get('autorun')
+
 def set_clipboard(text):
     win32clipboard.OpenClipboard()
     win32clipboard.EmptyClipboard()
@@ -43,6 +56,7 @@ def get_content_text(content: Union[str, List[Dict[str, str]], Dict[str, str]]) 
     elif isinstance(content, dict):
         return content.get("text", "")
     return ""
+
 
 def handle_claude_interaction(prompt):
     global last_request_time
@@ -92,10 +106,8 @@ def handle_claude_interaction(prompt):
 
     pyautogui.hotkey('ctrl','w')
 
-    time.sleep(1)
-
     pyautogui.hotkey('alt','tab')
-    
+
     # Get Claude's response
     win32clipboard.OpenClipboard()
     response = win32clipboard.GetClipboardData()
