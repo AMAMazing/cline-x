@@ -9,6 +9,10 @@ import logging
 import json
 from threading import Timer
 from typing import Union, List, Dict, Optional
+import base64
+import io
+from PIL import Image
+import re
 
 def read_config(filename="config.txt"):
     config = {}
@@ -17,7 +21,7 @@ def read_config(filename="config.txt"):
             line = line.strip()
             if '=' in line:  # Only process lines that contain an '='
                 key, value = line.split('=', 1)  # Split only at the first '='
-                config[key.strip()] = value.strip().strip('"')
+                config[key.strip()] = value.strip('"')
     return config
 
 config = read_config()
@@ -32,6 +36,36 @@ def set_clipboard(text):
         # Fallback for Unicode characters
         win32clipboard.SetClipboardData(win32clipboard.CF_UNICODETEXT, str(text).encode('utf-16le'))
     win32clipboard.CloseClipboard()
+
+def set_clipboard_image(image_data):
+    """Set image data to clipboard"""
+    try:
+        # Decode base64 image
+        binary_data = base64.b64decode(image_data.split(',')[1])
+        
+        # Convert to bitmap using PIL
+        image = Image.open(io.BytesIO(binary_data))
+        
+        # Convert to bitmap format
+        output = io.BytesIO()
+        image.convert("RGB").save(output, "BMP")
+        data = output.getvalue()[14:]  # Remove bitmap header
+        output.close()
+        
+        win32clipboard.OpenClipboard()
+        win32clipboard.EmptyClipboard()
+        win32clipboard.SetClipboardData(win32clipboard.CF_DIB, data)
+        win32clipboard.CloseClipboard()
+        return True
+    except Exception as e:
+        print(f"Error setting image to clipboard: {e}")
+        return False
+
+def extract_base64_image(text):
+    """Extract base64 image data from text"""
+    pattern = r'data:image\/[^;]+;base64,[a-zA-Z0-9+/]+=*'
+    match = re.search(pattern, text)
+    return match.group(0) if match else None
 
 def handle_save_dialog():
     optimiseWait(['save', 'runcommand','resume','startnewtask'],clicks=[1,1,1,0],altpath=None)
@@ -52,15 +86,41 @@ set_altpath(r"D:\cline-x-claudeweb\images\alt1440")
 url = 'https://claude.ai/new'
 
 def get_content_text(content: Union[str, List[Dict[str, str]], Dict[str, str]]) -> str:
-    """Extract text from different content formats"""
+    """Extract text and handle images from different content formats"""
     if isinstance(content, str):
         return content
     elif isinstance(content, list):
-        return " ".join(item["text"] for item in content if item.get("type") == "text")
+        parts = []
+        for item in content:
+            if item.get("type") == "text":
+                parts.append(item["text"])
+            elif item.get("type") == "image":
+                # Extract image data and description
+                image_data = item.get("image_url", {}).get("url", "")  # For base64 images
+                if not image_data and "data" in item:  # For binary image data
+                    image_data = base64.b64encode(item["data"]).decode('utf-8')
+                
+                # Set image to clipboard if it's base64 data
+                if image_data.startswith('data:image'):
+                    set_clipboard_image(image_data)
+                
+                # Add image reference to text with description if available
+                description = item.get("description", "An uploaded image")
+                parts.append(f"[Image: {description}]")
+        
+        return "\n".join(parts)
     elif isinstance(content, dict):
-        return content.get("text", "")
+        text = content.get("text", "")
+        if content.get("type") == "image":
+            image_data = content.get("image_url", {}).get("url", "")
+            if not image_data and "data" in content:
+                image_data = base64.b64encode(content["data"]).decode('utf-8')
+            if image_data.startswith('data:image'):
+                set_clipboard_image(image_data)
+            description = content.get("description", "An uploaded image")
+            return f"[Image: {description}]"
+        return text
     return ""
-
 
 def handle_claude_interaction(prompt):
     global last_request_time
@@ -93,9 +153,25 @@ def handle_claude_interaction(prompt):
     current_time = time.strftime('%Y-%m-%d %H:%M:%S')
     headers_log = f"{current_time} - {dict(request.headers)}\n"
     headers_log += f"{current_time} - INFO - Time since last request: {time_since_last} seconds\n"
-    headers_log += f"{current_time} - INFO - Request data: {request.get_json()}"
+    request_json = request.get_json()
     
-    # Send the prompt to Claude
+    # Extract and handle base64 images before logging
+    if 'messages' in request_json:
+        for message in request_json['messages']:
+            content = message.get('content', [])
+            if isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict) and item.get('type') == 'image_url':
+                        image_url = item.get('image_url', {}).get('url', '')
+                        if image_url.startswith('data:image'):
+                            set_clipboard_image(image_url)
+                            pyautogui.hotkey('ctrl','v')
+                            # Remove image data from logs
+                            item['image_url']['url'] = '[IMAGE DATA REMOVED]'
+    
+    headers_log += f"{current_time} - INFO - Request data: {request_json}"
+    
+    # Send instructions to Claude
     set_clipboard(headers_log)
     pyautogui.hotkey('ctrl','v')
 
