@@ -21,7 +21,8 @@ def read_config(filename="config.txt"):
             line = line.strip()
             if '=' in line:  # Only process lines that contain an '='
                 key, value = line.split('=', 1)  # Split only at the first '='
-                config[key.strip()] = value.strip('"')
+                # Strip whitespace and quotes, then convert to proper string
+                config[key.strip()] = str(value.strip().strip('"').strip("'"))
     return config
 
 config = read_config()
@@ -182,6 +183,13 @@ def handle_claude_interaction(prompt):
     pyautogui.hotkey('ctrl','v')
     
     optimiseWait('submit')
+
+    time.sleep(3)
+
+    if optimiseWait('goodevening',dontwait=True)['found'] == True:
+        optimiseWait('submit')
+    
+
     optimiseWait('copy')
 
     pyautogui.hotkey('ctrl','w')
@@ -213,11 +221,11 @@ def handle_claude_interaction(prompt):
     final_response = '\n'.join(cleaned_response)
     
     # Schedule the save dialog to be handled after response is returned
-    if autorun == 'True':
+    if autorun == "True":
         print('TRUE')
         Timer(0.5, handle_save_dialog).start()
     else:
-        print('false')
+        print('autorun false')
     
     return final_response
 
