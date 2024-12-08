@@ -34,7 +34,7 @@ def set_clipboard(text):
     win32clipboard.CloseClipboard()
 
 def handle_save_dialog():
-    optimiseWait(['save', 'runcommand','startnewtask'],clicks=[1,1,0],altpath=None)
+    optimiseWait(['save', 'runcommand','resume','startnewtask'],clicks=[1,1,1,0],altpath=None)
 
 logging.basicConfig(
     level=logging.DEBUG,
