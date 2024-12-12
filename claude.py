@@ -136,27 +136,18 @@ def handle_claude_interaction(prompt):
         sleep(MIN_REQUEST_INTERVAL - time_since_last)
     
     # Open Claude in browser and update last request time
-    logger.info("Opening Claude in browser")
-    url = 'https://claude.ai/new'
+    logger.info("Opening gemini in browser")
+    url = 'https://aistudio.google.com/prompts/new_chat'
     webbrowser.open(url)
     last_request_time = time.time()
-    sleep(2)
-    
-    # Wait for interface elements
-    logger.info("Waiting for Claude interface elements...")
-    result = optimiseWait(['claudenew', 'submit'], clicks=[1], xoff=[0,-100])
-    logger.info(f"OptimiseWait result: {result}")
-    
-    if result['image'] == 'submit':
-        sleep(0.5)
-        pyautogui.hotkey('ctrl', 'a')
-        pyautogui.press('delete')
 
     current_time = time.strftime('%Y-%m-%d %H:%M:%S')
     headers_log = f"{current_time} - {dict(request.headers)}\n"
     headers_log += f"{current_time} - INFO - Time since last request: {time_since_last} seconds\n"
     request_json = request.get_json()
     
+    optimiseWait('typesmthn')
+
     # Extract and handle base64 images before logging
     if 'messages' in request_json:
         for message in request_json['messages']:
@@ -172,83 +163,31 @@ def handle_claude_interaction(prompt):
                             item['image_url']['url'] = '[IMAGE DATA REMOVED]'
     
     headers_log += f"{current_time} - INFO - Request data: {request_json}"
-    
-    sleep(1)
 
     # Send instructions to Claude
     set_clipboard(headers_log)
     pyautogui.hotkey('ctrl','v')
 
-    sleep(1)
-
     set_clipboard('Please follow these rules: For each response, you must use one of the available tools formatted in proper XML tags. Tools include attempt_completion, ask_followup_question, read_file, write_to_file, search_files, list_files, execute_command, and list_code_definition_names. Do not respond conversationally - only use tool commands: ')
     pyautogui.hotkey('ctrl','v')
-    
-    sleep(1)
 
     set_clipboard(prompt)
     pyautogui.hotkey('ctrl','v')
 
+    optimiseWait('run')
+    
     sleep(1)
+    print('copying now')
 
-    optimiseWait('submit')
-
-    sleep(3)
-
-    if optimiseWait('goodevening',dontwait=True)['found'] == True:
-        optimiseWait('submit')
-
-    result = optimiseWait(['copy','limitreached'],clicks=[1,0])
+    optimiseWait('copy')
     
     pyautogui.hotkey('ctrl','w')
-
-    print(result)
-
-    if result['image'] == 'limitreached':
-        print('Opening chatgpt')
-        url = 'https://chatgpt.com/g/g-YyyyMT9XH-chatgpt-classic'
-        webbrowser.open(url)
-        last_request_time = time.time()
-        
-        optimiseWait('gptclassic',clicks=0)
-        result = optimiseWait('messagegptclassic',dontwait=True)
-        if result['found'] == False:
-            print(result)
-            optimiseWait('gptattachment',yoff=-100)
-            print('clicked')
-
-            pyautogui.hotkey('ctrl', 'a')
-            pyautogui.press('delete')
-        
-        print('copypasting now')
-
-        set_clipboard('Please follow these rules: For each response, you must use one of the available tools formatted in proper XML tags. Tools include attempt_completion, ask_followup_question, read_file, write_to_file, search_files, list_files, execute_command, and list_code_definition_names. Do not respond conversationally - only use tool commands: ')
-        pyautogui.hotkey('ctrl','v')
-
-        sleep(1)
-
-        # Send instructions to chatgpt
-        set_clipboard(headers_log)
-        pyautogui.hotkey('ctrl','v')
-
-        sleep(1)
-        
-        set_clipboard(prompt)
-        pyautogui.hotkey('ctrl','v')
-
-        sleep(1)
-
-        print('submitting now')
-
-        optimiseWait('gptclassicsubmit')
-
-        print('submitted')
-
-        optimiseWait('gptcopy')
-
-        pyautogui.hotkey('ctrl','w')
     
     pyautogui.hotkey('alt','tab')
+
+    print('closed')
+    sleep(1)
+    print('waitdone')
 
     # Get Claude's response
     win32clipboard.OpenClipboard()
