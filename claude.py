@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request, Response
 import webbrowser
 import win32clipboard
 import time
+from time import sleep
 import os   
 from optimisewait import optimiseWait, set_autopath, set_altpath
 import pyautogui
@@ -69,7 +70,7 @@ def extract_base64_image(text):
     return match.group(0) if match else None
 
 def handle_save_dialog():
-    optimiseWait(['save', 'runcommand','resume','startnewtask'],clicks=[1,1,1,0],altpath=None)
+    optimiseWait(['save', 'runcommand','resume','approve','startnewtask'],clicks=[1,1,1,1,0],altpath=None)
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -84,7 +85,6 @@ MIN_REQUEST_INTERVAL = 5  # Minimum time between new tab creation
 
 set_autopath(r"D:\cline-x-claudeweb\images")
 set_altpath(r"D:\cline-x-claudeweb\images\alt1440")
-url = 'https://claude.ai/new'
 
 def get_content_text(content: Union[str, List[Dict[str, str]], Dict[str, str]]) -> str:
     """Extract text and handle images from different content formats"""
@@ -133,13 +133,14 @@ def handle_claude_interaction(prompt):
     time_since_last = current_time - last_request_time
     
     if time_since_last < MIN_REQUEST_INTERVAL:
-        time.sleep(MIN_REQUEST_INTERVAL - time_since_last)
+        sleep(MIN_REQUEST_INTERVAL - time_since_last)
     
     # Open Claude in browser and update last request time
     logger.info("Opening Claude in browser")
+    url = 'https://claude.ai/new'
     webbrowser.open(url)
     last_request_time = time.time()
-    time.sleep(2)
+    sleep(2)
     
     # Wait for interface elements
     logger.info("Waiting for Claude interface elements...")
@@ -147,7 +148,7 @@ def handle_claude_interaction(prompt):
     logger.info(f"OptimiseWait result: {result}")
     
     if result['image'] == 'submit':
-        time.sleep(0.5)
+        sleep(0.5)
         pyautogui.hotkey('ctrl', 'a')
         pyautogui.press('delete')
 
@@ -172,28 +173,81 @@ def handle_claude_interaction(prompt):
     
     headers_log += f"{current_time} - INFO - Request data: {request_json}"
     
+    sleep(1)
+
     # Send instructions to Claude
     set_clipboard(headers_log)
     pyautogui.hotkey('ctrl','v')
 
+    sleep(1)
+
     set_clipboard('Please follow these rules: For each response, you must use one of the available tools formatted in proper XML tags. Tools include attempt_completion, ask_followup_question, read_file, write_to_file, search_files, list_files, execute_command, and list_code_definition_names. Do not respond conversationally - only use tool commands: ')
     pyautogui.hotkey('ctrl','v')
     
+    sleep(1)
+
     set_clipboard(prompt)
     pyautogui.hotkey('ctrl','v')
-    
+
+    sleep(1)
+
     optimiseWait('submit')
 
-    time.sleep(3)
+    sleep(3)
 
     if optimiseWait('goodevening',dontwait=True)['found'] == True:
         optimiseWait('submit')
+
+    result = optimiseWait(['copy','limitreached'],clicks=[1,0])
     
-
-    optimiseWait('copy')
-
     pyautogui.hotkey('ctrl','w')
 
+    print(result)
+
+    if result['image'] == 'limitreached':
+        print('Opening chatgpt')
+        url = 'https://chatgpt.com/g/g-YyyyMT9XH-chatgpt-classic'
+        webbrowser.open(url)
+        last_request_time = time.time()
+        
+        optimiseWait('gptclassic',clicks=0)
+        result = optimiseWait('messagegptclassic',dontwait=True)
+        if result['found'] == False:
+            print(result)
+            optimiseWait('gptattachment',yoff=-100)
+            print('clicked')
+
+            pyautogui.hotkey('ctrl', 'a')
+            pyautogui.press('delete')
+        
+        print('copypasting now')
+
+        set_clipboard('Please follow these rules: For each response, you must use one of the available tools formatted in proper XML tags. Tools include attempt_completion, ask_followup_question, read_file, write_to_file, search_files, list_files, execute_command, and list_code_definition_names. Do not respond conversationally - only use tool commands: ')
+        pyautogui.hotkey('ctrl','v')
+
+        sleep(1)
+
+        # Send instructions to chatgpt
+        set_clipboard(headers_log)
+        pyautogui.hotkey('ctrl','v')
+
+        sleep(1)
+        
+        set_clipboard(prompt)
+        pyautogui.hotkey('ctrl','v')
+
+        sleep(1)
+
+        print('submitting now')
+
+        optimiseWait('gptclassicsubmit')
+
+        print('submitted')
+
+        optimiseWait('gptcopy')
+
+        pyautogui.hotkey('ctrl','w')
+    
     pyautogui.hotkey('alt','tab')
 
     # Get Claude's response
@@ -286,7 +340,7 @@ def chat_completions():
                         }]
                     }
                     yield f"data: {json.dumps(chunk)}\n\n"
-                    time.sleep(0.1)
+                    sleep(0.1)
                 
                 # End stream
                 chunk = {
