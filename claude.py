@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request, Response
 import webbrowser
 import win32clipboard
 import time
+import pywintypes
 from time import sleep
 import os   
 from optimisewait import optimiseWait, set_autopath, set_altpath
@@ -29,16 +30,30 @@ def read_config(filename="config.txt"):
 config = read_config()
 autorun = config.get('autorun')
 
-def set_clipboard(text):
-    win32clipboard.OpenClipboard()
-    win32clipboard.EmptyClipboard()
-    try:
-        win32clipboard.SetClipboardText(str(text))
-    except Exception:
-        # Fallback for Unicode characters
-        win32clipboard.SetClipboardData(win32clipboard.CF_UNICODETEXT, str(text).encode('utf-16le'))
-    win32clipboard.CloseClipboard()
+import win32clipboard
+import time
 
+def set_clipboard(text, retries=3, delay=0.2):
+    for i in range(retries):
+        try:
+            win32clipboard.OpenClipboard()
+            win32clipboard.EmptyClipboard()
+            try:
+                win32clipboard.SetClipboardText(str(text))
+            except Exception:
+                # Fallback for Unicode characters
+                win32clipboard.SetClipboardData(win32clipboard.CF_UNICODETEXT, str(text).encode('utf-16le'))
+            win32clipboard.CloseClipboard()
+            return  # Success
+        except pywintypes.error as e:
+            if e.winerror == 5:  # Access is denied
+                print(f"Clipboard access denied. Retrying... (Attempt {i+1}/{retries})")
+                time.sleep(delay)
+            else:
+                raise  # Re-raise other pywintypes errors
+        except Exception as e:
+            raise  # Re-raise other exceptions
+    print(f"Failed to set clipboard after {retries} attempts.")
 def set_clipboard_image(image_data):
     """Set image data to clipboard"""
     try:
@@ -161,6 +176,7 @@ def handle_claude_interaction(prompt):
                             pyautogui.hotkey('ctrl','v')
                             # Remove image data from logs
                             item['image_url']['url'] = '[IMAGE DATA REMOVED]'
+                            sleep(5)
     
     headers_log += f"{current_time} - INFO - Request data: {request_json}"
 
@@ -168,7 +184,7 @@ def handle_claude_interaction(prompt):
     set_clipboard(headers_log)
     pyautogui.hotkey('ctrl','v')
 
-    set_clipboard('Please follow these rules: For each response, you must use one of the available tools formatted in proper XML tags. Tools include attempt_completion, ask_followup_question, read_file, write_to_file, search_files, list_files, execute_command, and list_code_definition_names. Do not respond conversationally - only use tool commands: ')
+    set_clipboard(r'Please follow these rules: For each response, you must use one of the available tools formatted in proper XML tags. Tools include attempt_completion, ask_followup_question, read_file, write_to_file, search_files, list_files, execute_command, and list_code_definition_names. Do not respond conversationally - only use tool commands, also DO NOT USE \n for writing your code out: ')
     pyautogui.hotkey('ctrl','v')
 
     set_clipboard(prompt)
@@ -176,7 +192,8 @@ def handle_claude_interaction(prompt):
 
     optimiseWait('run')
     
-    sleep(1)
+    #sleep(1)
+    optimiseWait('likedislike', clicks=0)
     print('copying now')
 
     optimiseWait('copy')
@@ -185,9 +202,9 @@ def handle_claude_interaction(prompt):
     
     pyautogui.hotkey('alt','tab')
 
-    print('closed')
-    sleep(1)
-    print('waitdone')
+    #print('closed')
+    #sleep(1)
+    #print('waitdone')
 
     # Get Claude's response
     win32clipboard.OpenClipboard()
