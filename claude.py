@@ -4,7 +4,7 @@ import win32clipboard
 import time
 import pywintypes
 from time import sleep
-import os   
+import os
 from optimisewait import optimiseWait, set_autopath, set_altpath
 import pyautogui
 import logging
@@ -213,24 +213,30 @@ def handle_claude_interaction(prompt):
     response = win32clipboard.GetClipboardData()
     win32clipboard.CloseClipboard()
     
-    # Clean up the response - preserve \n in code blocks
-    cleaned_response = []
-    in_code_block = False
-    xml_tags = ['<write_to_file>', '</write_to_file>', '<content>', '</content>']
     
+    # Clean up the response - this is where we handle multiline vs single-line
+    cleaned_response = ""
+    
+    
+    xml_tags = ['<write_to_file>', '</write_to_file>', '<content>', '</content>','<thinking>','</thinking>','<execute_command>','</execute_command>','<command>','</command>','<ask_followup_question>','</ask_followup_question>','<question>','</question>','<attempt_completion>','</attempt_completion>','<result>','</result>','<list_code_definition_names>','</list_code_definition_names>','<path>','</path>','<search_files>','</search_files>','<regex>','</regex>','<file_pattern>','</file_pattern>']
+    
+    
+    is_code_block = False
     for line in response.splitlines():
         if any(tag in line for tag in xml_tags):
-            in_code_block = '<content>' in line or (in_code_block and '</content>' not in line)
-            cleaned_response.append(line)
-        else:
-            if in_code_block:
-                # Preserve line as-is in code blocks
-                cleaned_response.append(line)
+            
+            if "<" in line:
+                cleaned_response += line + "\n"
             else:
-                # Replace escaped newlines outside code blocks
-                cleaned_response.append(line.replace('\\n', '\n'))
+                cleaned_response += line
+                
+        else:
+            cleaned_response += line + "\n"
+    
+    
+    final_response = cleaned_response
 
-    final_response = '\n'.join(cleaned_response)
+    
     
     # Schedule the save dialog to be handled after response is returned
     if autorun == "True":
