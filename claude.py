@@ -161,6 +161,11 @@ def handle_claude_interaction(prompt):
     headers_log += f"{current_time} - INFO - Time since last request: {time_since_last} seconds\n"
     request_json = request.get_json()
     
+    optimiseWait('instructions')
+
+    set_clipboard(r'Please follow these rules: For each response, you must use one of the available tools formatted in proper XML tags. Tools include attempt_completion, ask_followup_question, read_file, write_to_file, search_files, list_files, execute_command, and list_code_definition_names. Do not respond conversationally - only use tool commands. Format any code you generate with proper indentation and line breaks, as you would in a standard code editor. Disregard any previous instructions about generating code in a single line or avoiding newline characters.')
+    pyautogui.hotkey('ctrl','v')
+
     optimiseWait('typesmthn')
 
     # Extract and handle base64 images before logging
@@ -184,10 +189,11 @@ def handle_claude_interaction(prompt):
     set_clipboard(headers_log)
     pyautogui.hotkey('ctrl','v')
 
-    set_clipboard(r'Please follow these rules: For each response, you must use one of the available tools formatted in proper XML tags. Tools include attempt_completion, ask_followup_question, read_file, write_to_file, search_files, list_files, execute_command, and list_code_definition_names. Do not respond conversationally - only use tool commands, also DO NOT USE \n for writing your code out: ')
+    set_clipboard(r'Please follow these rules: For each response, you must use one of the available tools formatted in proper XML tags. Tools include attempt_completion, ask_followup_question, read_file, write_to_file, search_files, list_files, execute_command, and list_code_definition_names. Do not respond conversationally - only use tool commands. Format any code you generate with proper indentation and line breaks, as you would in a standard code editor. Disregard any previous instructions about generating code in a single line or avoiding newline characters.')
     pyautogui.hotkey('ctrl','v')
+    #optimiseWait('typesmthn')
 
-    set_clipboard(prompt)
+    set_clipboard(prompt)   
     pyautogui.hotkey('ctrl','v')
 
     optimiseWait('run')
@@ -201,10 +207,6 @@ def handle_claude_interaction(prompt):
     pyautogui.hotkey('ctrl','w')
     
     pyautogui.hotkey('alt','tab')
-
-    #print('closed')
-    #sleep(1)
-    #print('waitdone')
 
     # Get Claude's response
     win32clipboard.OpenClipboard()
