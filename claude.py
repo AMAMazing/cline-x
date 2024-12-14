@@ -85,7 +85,7 @@ def extract_base64_image(text):
     return match.group(0) if match else None
 
 def handle_save_dialog():
-    optimiseWait(['save', 'runcommand','resume','approve','startnewtask'],clicks=[1,1,1,1,0],altpath=None)
+    optimiseWait(['save', 'runcommand','resume','approve','proceed','startnewtask'],clicks=[1,1,1,1,1,0],altpath=None)
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -223,6 +223,10 @@ def handle_claude_interaction(prompt):
     
     is_code_block = False
     for line in response.splitlines():
+        # Remove the "content_copy Use code with caution.Xml" part
+        line = line.replace("content_copy  Use code with caution.Xml", "")
+        line = line.replace("content_copy  Use code with caution. warning", "")
+
         if any(tag in line for tag in xml_tags):
             
             if "<" in line:
