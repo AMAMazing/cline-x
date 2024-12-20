@@ -1,1 +1,2 @@
-autorun = "True"
+autorun=False
+usefirefox=False

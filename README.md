@@ -1,15 +1,15 @@
-# Cline X Claude.ai (Web interface)
+# Cline X (Web interface)
 
-A Python-based API bridge that enables Cline (VS Code Extension) to interact with Claude.ai web interface, providing OpenAI-compatible API endpoints for seamless integration.
+A Python-based API bridge that enables Cline (VS Code Extension) to interact with the Google AI Studio web interface, providing OpenAI-compatible API endpoints for seamless integration.
 
 ## Overview
 
-This project creates a Flask server that acts as a middleware between Cline and Claude.ai, translating API requests into web interactions. It simulates an OpenAI-compatible API endpoint, allowing Cline to use Claude.ai as if it were communicating with the OpenAI API.
+This project creates a Flask server that acts as a middleware between Cline and Google AI Studio, translating API requests into web interactions. It simulates an OpenAI-compatible API endpoint, allowing Cline to use Google AI Studio as if it were communicating with the OpenAI API.
 
 ## Features
 
 - OpenAI-compatible API endpoints
-- Automated browser interaction with Claude.ai
+- Automated browser interaction with Google AI Studio
 - Request rate limiting and management
 - Clipboard-based data transfer
 - Streaming response support
@@ -21,7 +21,7 @@ This project creates a Flask server that acts as a middleware between Cline and 
 - Python 3.6+
 - Windows OS (due to win32clipboard dependency)
 - Chrome/Firefox browser installed
-- Active Claude.ai account with logged-in session
+- Active Google AI Studio account with logged-in session
 
 Required Python packages:
 ```
@@ -47,9 +47,19 @@ pip install flask pywin32 pyautogui
 3. Set up the image directory structure (required for GUI automation):
 ```
 images/
-├── claudenew.png
+├── approve.png
 ├── copy.png
-├── submit.png
+├── error.png
+├── instructions.png
+├── likedislike.png
+├── proceed.png
+├── proceed2.png
+├── resume.png
+├── run.png
+├── runcommand.png
+├── save.png
+├── startnewtask.png
+├── typesmthn.png
 └── alt1440/
     ├── claudenew.png
     ├── copy.png

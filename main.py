@@ -29,6 +29,7 @@ def read_config(filename="config.txt"):
 
 config = read_config()
 autorun = config.get('autorun')
+usefirefox = config.get('usefirefox', 'False') == 'True'
 
 import win32clipboard
 import time
@@ -155,7 +156,19 @@ def handle_claude_interaction(prompt):
     while working == 'error':
         logger.info("Opening gemini in browser")
         url = 'https://aistudio.google.com/prompts/new_chat'
-        webbrowser.open(url)
+        if usefirefox:
+            try:
+                firefox = webbrowser.Mozilla("C:\\Program Files\\Mozilla Firefox\\firefox.exe") 
+                firefox.open_new_tab(url)
+            except webbrowser.Error:
+                logger.error("Firefox is not found in your system's PATH. Please add it or use Chrome.")
+                return "Error: Firefox not found."
+        else:
+            try:
+                webbrowser.open_new_tab(url)  # Open in the default browser
+            except webbrowser.Error:
+                logger.error("Could not open a web browser. Ensure Chrome or Firefox is installed and in your PATH.")
+                return "Error: Could not open a web browser."
         last_request_time = time.time()
 
         current_time = time.strftime('%Y-%m-%d %H:%M:%S')
@@ -225,8 +238,12 @@ def handle_claude_interaction(prompt):
     is_code_block = False
     for line in response.splitlines():
         # Remove the "content_copy Use code with caution.Xml" part
+        line = line.replace(" content_copy  download  Use code [with caution](https://support.google.com/legal/answer/13505487).Markdown", "")
+        line = line.replace(" content_copy  download  Use code [with caution](https://support.google.com/legal/answer/13505487).Xml", "")
+        line = line.replace(" content_copy  download  Use code [with caution](https://support.google.com/legal/answer/13505487).", "")
         line = line.replace("content_copy  Use code with caution.Xml", "")
         line = line.replace("content_copy  Use code with caution. warning", "")
+        line = line.replace("content_copy  download  Use code with caution.Xml", "")
         line = line.replace("content_copy  Use code with caution.", "")
 
         if any(tag in line for tag in xml_tags):
