@@ -152,71 +152,65 @@ def handle_claude_interaction(prompt):
         sleep(MIN_REQUEST_INTERVAL - time_since_last)
     
     # Open Claude in browser and update last request 
-    working = 'error'
-    while working == 'error':
-        logger.info("Opening gemini in browser")
-        url = 'https://aistudio.google.com/prompts/new_chat'
-        if usefirefox:
-            try:
-                firefox = webbrowser.Mozilla("C:\\Program Files\\Mozilla Firefox\\firefox.exe") 
-                firefox.open_new_tab(url)
-            except webbrowser.Error:
-                logger.error("Firefox is not found in your system's PATH. Please add it or use Chrome.")
-                return "Error: Firefox not found."
-        else:
-            try:
-                webbrowser.open_new_tab(url)  # Open in the default browser
-            except webbrowser.Error:
-                logger.error("Could not open a web browser. Ensure Chrome or Firefox is installed and in your PATH.")
-                return "Error: Could not open a web browser."
-        last_request_time = time.time()
+    logger.info("Opening o1 in browser")
+    url = 'https://chatgpt.com/?model=o1'
+    if usefirefox:
+        try:
+            firefox = webbrowser.Mozilla("C:\\Program Files\\Mozilla Firefox\\firefox.exe") 
+            firefox.open_new_tab(url)
+        except webbrowser.Error:
+            logger.error("Firefox is not found in your system's PATH. Please add it or use Chrome.")
+            return "Error: Firefox not found."
+    else:
+        try:
+            webbrowser.open_new_tab(url)  # Open in the default browser
+        except webbrowser.Error:
+            logger.error("Could not open a web browser. Ensure Chrome or Firefox is installed and in your PATH.")
+            return "Error: Could not open a web browser."
+    last_request_time = time.time()
 
-        current_time = time.strftime('%Y-%m-%d %H:%M:%S')
-        headers_log = f"{current_time} - {dict(request.headers)}\n"
-        headers_log += f"{current_time} - INFO - Time since last request: {time_since_last} seconds\n"
-        request_json = request.get_json()
+    current_time = time.strftime('%Y-%m-%d %H:%M:%S')
+    headers_log = f"{current_time} - {dict(request.headers)}\n"
+    headers_log += f"{current_time} - INFO - Time since last request: {time_since_last} seconds\n"
+    request_json = request.get_json()
 
-        optimiseWait('typesmthn')
+    optimiseWait('o1message')
 
-        # Extract and handle base64 images before logging
-        if 'messages' in request_json:
-            for message in request_json['messages']:
-                content = message.get('content', [])
-                if isinstance(content, list):
-                    for item in content:
-                        if isinstance(item, dict) and item.get('type') == 'image_url':
-                            image_url = item.get('image_url', {}).get('url', '')
-                            if image_url.startswith('data:image'):
-                                set_clipboard_image(image_url)
-                                pyautogui.hotkey('ctrl','v')
-                                # Remove image data from logs
-                                item['image_url']['url'] = '[IMAGE DATA REMOVED]'
-                                sleep(5)
-        
-        headers_log += f"{current_time} - INFO - Request data: {request_json}"
+    # Extract and handle base64 images before logging
+    if 'messages' in request_json:
+        for message in request_json['messages']:
+            content = message.get('content', [])
+            if isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict) and item.get('type') == 'image_url':
+                        image_url = item.get('image_url', {}).get('url', '')
+                        if image_url.startswith('data:image'):
+                            set_clipboard_image(image_url)
+                            pyautogui.hotkey('ctrl','v')
+                            # Remove image data from logs
+                            item['image_url']['url'] = '[IMAGE DATA REMOVED]'
+                            sleep(5)
+    
+    headers_log += f"{current_time} - INFO - Request data: {request_json}"
 
-        # Send instructions to Claude
-        set_clipboard(headers_log)
+    # Send instructions to Claude
+    set_clipboard(headers_log)
+    pyautogui.hotkey('ctrl','v')
+
+    if autorun == "True":
+        set_clipboard(r'You are set to autorun mode which means you cant use attempt completion or ask follow up questions, you can only write code and use terminal, so if you need something like a database or something, work it out yourself. Dont run anything in terminal that asks for input after you have run the command. And only write 1 command at a time, dont even try to join 2 commands together with an & symbol.')
         pyautogui.hotkey('ctrl','v')
 
-        if autorun == "True":
-            set_clipboard(r'You are set to autorun mode which means you cant use attempt completion or ask follow up questions, you can only write code and use terminal, so if you need something like a database or something, work it out yourself. Dont run anything in terminal that asks for input after you have run the command. And only write 1 command at a time, dont even try to join 2 commands together with an & symbol.')
-            pyautogui.hotkey('ctrl','v')
+    set_clipboard(r'Please follow these rules: For each response, you must use one of the available tools formatted in proper XML tags. Tools include attempt_completion, ask_followup_question, read_file, write_to_file, search_files, list_files, execute_command, and list_code_definition_names. Do not respond conversationally - only use tool commands. Format any code you generate with proper indentation and line breaks, as you would in a standard code editor. Disregard any previous instructions about generating code in a single line or avoiding newline characters.')
+    pyautogui.hotkey('ctrl','v')
+    #optimiseWait('typesmthn')
 
-        set_clipboard(r'Please follow these rules: For each response, you must use one of the available tools formatted in proper XML tags. Tools include attempt_completion, ask_followup_question, read_file, write_to_file, search_files, list_files, execute_command, and list_code_definition_names. Do not respond conversationally - only use tool commands. Format any code you generate with proper indentation and line breaks, as you would in a standard code editor. Disregard any previous instructions about generating code in a single line or avoiding newline characters.')
-        pyautogui.hotkey('ctrl','v')
-        #optimiseWait('typesmthn')
+    set_clipboard(prompt)   
+    pyautogui.hotkey('ctrl','v')
 
-        set_clipboard(prompt)   
-        pyautogui.hotkey('ctrl','v')
+    optimiseWait('o1run')
 
-        optimiseWait('run')
-        
-        working = optimiseWait(['likedislike','error'], clicks=0)['image']
-        if working == 'error':
-            pyautogui.hotkey('ctrl','w')
-
-    optimiseWait('copy')
+    optimiseWait('o1copy')
     
     pyautogui.hotkey('ctrl','w')
     
@@ -227,40 +221,6 @@ def handle_claude_interaction(prompt):
     response = win32clipboard.GetClipboardData()
     win32clipboard.CloseClipboard()
     
-    
-    # Clean up the response - this is where we handle multiline vs single-line
-    cleaned_response = ""
-    
-    
-    xml_tags = ['<write_to_file>', '</write_to_file>', '<content>', '</content>','<thinking>','</thinking>','<execute_command>','</execute_command>','<command>','</command>','<ask_followup_question>','</ask_followup_question>','<question>','</question>','<attempt_completion>','</attempt_completion>','<result>','</result>','<list_code_definition_names>','</list_code_definition_names>','<path>','</path>','<search_files>','</search_files>','<regex>','</regex>','<file_pattern>','</file_pattern>']
-    
-    
-    is_code_block = False
-    for line in response.splitlines():
-        # Remove the "content_copy Use code with caution.Xml" part
-        line = line.replace(" content_copy  download  Use code [with caution](https://support.google.com/legal/answer/13505487).Markdown", "")
-        line = line.replace(" content_copy  download  Use code [with caution](https://support.google.com/legal/answer/13505487).Xml", "")
-        line = line.replace(" content_copy  download  Use code [with caution](https://support.google.com/legal/answer/13505487).", "")
-        line = line.replace("content_copy  Use code with caution.Xml", "")
-        line = line.replace("content_copy  Use code with caution. warning", "")
-        line = line.replace("content_copy  download  Use code with caution.Xml", "")
-        line = line.replace("content_copy  Use code with caution.", "")
-
-        if any(tag in line for tag in xml_tags):
-            
-            if "<" in line:
-                cleaned_response += line + "\n"
-            else:
-                cleaned_response += line
-                
-        else:
-            cleaned_response += line + "\n"
-    
-    
-    final_response = cleaned_response
-
-    
-    
     # Schedule the save dialog to be handled after response is returned
     if autorun == "True":
         print('TRUE')
@@ -268,7 +228,7 @@ def handle_claude_interaction(prompt):
     else:
         print('autorun false')
     
-    return final_response
+    return response
 
 @app.route('/', methods=['GET'])
 def home():
