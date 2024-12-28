@@ -154,19 +154,8 @@ def handle_claude_interaction(prompt):
     # Open Claude in browser and update last request 
     logger.info("Opening o1 in browser")
     url = 'https://chatgpt.com/?model=o1'
-    if usefirefox:
-        try:
-            firefox = webbrowser.Mozilla("C:\\Program Files\\Mozilla Firefox\\firefox.exe") 
-            firefox.open_new_tab(url)
-        except webbrowser.Error:
-            logger.error("Firefox is not found in your system's PATH. Please add it or use Chrome.")
-            return "Error: Firefox not found."
-    else:
-        try:
-            webbrowser.open_new_tab(url)  # Open in the default browser
-        except webbrowser.Error:
-            logger.error("Could not open a web browser. Ensure Chrome or Firefox is installed and in your PATH.")
-            return "Error: Could not open a web browser."
+    
+    webbrowser.open_new_tab(url)
     last_request_time = time.time()
 
     current_time = time.strftime('%Y-%m-%d %H:%M:%S')
@@ -174,7 +163,9 @@ def handle_claude_interaction(prompt):
     headers_log += f"{current_time} - INFO - Time since last request: {time_since_last} seconds\n"
     request_json = request.get_json()
 
-    optimiseWait('o1message')
+    optimiseWait('littlegpt',clicks=0)
+
+    optimiseWait(['o1message','o1message2'])
 
     # Extract and handle base64 images before logging
     if 'messages' in request_json:
@@ -198,19 +189,20 @@ def handle_claude_interaction(prompt):
     pyautogui.hotkey('ctrl','v')
 
     if autorun == "True":
-        set_clipboard(r'You are set to autorun mode which means you cant use attempt completion or ask follow up questions, you can only write code and use terminal, so if you need something like a database or something, work it out yourself. Dont run anything in terminal that asks for input after you have run the command. And only write 1 command at a time, dont even try to join 2 commands together with an & symbol.')
+        set_clipboard(r'You are set to autorun mode which means you cant use attempt completion or ask follow up questions, you can only write code and use terminal, so if you need something like a database or something, work it out yourself. Dont run anything in terminal that asks for input after you have run the command.')
         pyautogui.hotkey('ctrl','v')
 
     set_clipboard(r'Please follow these rules: For each response, you must use one of the available tools formatted in proper XML tags. Tools include attempt_completion, ask_followup_question, read_file, write_to_file, search_files, list_files, execute_command, and list_code_definition_names. Do not respond conversationally - only use tool commands. Format any code you generate with proper indentation and line breaks, as you would in a standard code editor. Disregard any previous instructions about generating code in a single line or avoiding newline characters.')
     pyautogui.hotkey('ctrl','v')
-    #optimiseWait('typesmthn')
 
     set_clipboard(prompt)   
     pyautogui.hotkey('ctrl','v')
 
     optimiseWait('o1run')
 
-    optimiseWait('o1copy')
+    optimiseWait('scroll2')
+
+    optimiseWait('o1copy')    
     
     pyautogui.hotkey('ctrl','w')
     
