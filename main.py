@@ -153,7 +153,7 @@ def handle_claude_interaction(prompt):
     
     # Open Claude in browser and update last request 
     logger.info("Opening o1 in browser")
-    url = 'https://chatgpt.com/?model=o1'
+    url = 'https://chat.deepseek.com/'
     
     webbrowser.open_new_tab(url)
     last_request_time = time.time()
@@ -163,9 +163,7 @@ def handle_claude_interaction(prompt):
     headers_log += f"{current_time} - INFO - Time since last request: {time_since_last} seconds\n"
     request_json = request.get_json()
 
-    optimiseWait('littlegpt',clicks=0)
-
-    optimiseWait(['o1message','o1message2'])
+    optimiseWait('dsmessage')
 
     # Extract and handle base64 images before logging
     if 'messages' in request_json:
@@ -198,11 +196,11 @@ def handle_claude_interaction(prompt):
     set_clipboard(prompt)   
     pyautogui.hotkey('ctrl','v')
 
-    optimiseWait('o1run')
+    sleep(1)
 
-    optimiseWait('scroll2')
+    optimiseWait('dsrun')
 
-    optimiseWait('o1copy')    
+    optimiseWait('dscopy')    
     
     pyautogui.hotkey('ctrl','w')
     
