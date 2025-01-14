@@ -86,7 +86,7 @@ python claude.py
 2. Configure Cline to use the local API endpoint:
    - Open Cline settings in VS Code
    - Select "OpenAI Compatible" as the API provider
-   - Set Base URL to: `http://localhost:3000`
+   - Set Base URL to: `http://localhost:3001`
    - Set API Key to any non-empty value (e.g., "any-value")
    - Set Model ID to "gpt-3.5-turbo"
 
