@@ -178,7 +178,7 @@ def handle_claude_interaction(prompt):
                             pyautogui.hotkey('ctrl','v')
                             # Remove image data from logs
                             item['image_url']['url'] = '[IMAGE DATA REMOVED]'
-                            sleep(5)
+                            sleep(7)
     
     headers_log += f"{current_time} - INFO - Request data: {request_json}"
 
@@ -196,7 +196,7 @@ def handle_claude_interaction(prompt):
     set_clipboard(prompt)   
     pyautogui.hotkey('ctrl','v')
 
-    sleep(1)
+    sleep(2.5)
 
     optimiseWait('dsrun')
 
@@ -321,5 +321,5 @@ def chat_completions():
         return jsonify({'error': {'message': str(e)}}), 500
 
 if __name__ == '__main__':
-    logger.info("Starting Claude API Bridge server on port 3000")
-    app.run(host="0.0.0.0", port=3000)
+    logger.info("Starting Claude API Bridge server on port 3001")
+    app.run(host="0.0.0.0", port=3001)
