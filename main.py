@@ -155,7 +155,7 @@ def handle_claude_interaction(prompt):
     logger.info("Opening o1 in browser")
     url = 'https://chat.deepseek.com/'
     
-    webbrowser.open_new_tab(url)
+    webbrowser.open(url)
     last_request_time = time.time()
 
     current_time = time.strftime('%Y-%m-%d %H:%M:%S')
