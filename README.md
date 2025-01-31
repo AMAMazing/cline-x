@@ -1,15 +1,15 @@
 # Cline X (Web interface)
 
-A Python-based API bridge that enables Cline (VS Code Extension) to interact with the Google AI Studio web interface, providing OpenAI-compatible API endpoints for seamless integration.
+A Python-based API bridge that enables Cline (VS Code Extension) to interact with the LLMs web interface, providing OpenAI-compatible API endpoints for seamless integration.
 
 ## Overview
 
-This project creates a Flask server that acts as a middleware between Cline and Google AI Studio, translating API requests into web interactions. It simulates an OpenAI-compatible API endpoint, allowing Cline to use Google AI Studio as if it were communicating with the OpenAI API.
+This project creates a Flask server that acts as a middleware between Cline and LLM webchat interface, translating API requests into web interactions. It simulates an OpenAI-compatible API endpoint, allowing Cline to use the web interface as if it were communicating with the OpenAI API.
 
 ## Features
 
 - OpenAI-compatible API endpoints
-- Automated browser interaction with Google AI Studio
+- Automated browser interaction with LLM logged in
 - Request rate limiting and management
 - Clipboard-based data transfer
 - Streaming response support
@@ -21,7 +21,7 @@ This project creates a Flask server that acts as a middleware between Cline and 
 - Python 3.6+
 - Windows OS (due to win32clipboard dependency)
 - Chrome/Firefox browser installed
-- Active Google AI Studio account with logged-in session
+- Active LLM account logged in
 
 Required Python packages:
 ```
@@ -35,8 +35,7 @@ optimisewait
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/claude-cline-bridge.git
-cd claude-cline-bridge
+git clone https://github.com/AMAMazing/cline-x.git
 ```
 
 2. Install dependencies:
@@ -80,7 +79,7 @@ set_altpath(r"path/to/your/images/alt1440")
 
 1. Start the server:
 ```bash
-python claude.py
+python main.py
 ```
 
 2. Configure Cline to use the local API endpoint:
@@ -128,7 +127,7 @@ The server implements a simple rate limiting mechanism:
 - Windows-only support (due to win32clipboard)
 - Requires active browser window
 - Depends on GUI automation (sensitive to UI changes)
-- Requires logged-in Claude.ai session
+- Requires logged-in web session
 - Rate-limited by design
 
 ## Contributing

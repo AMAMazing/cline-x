@@ -15,6 +15,7 @@ import base64
 import io
 from PIL import Image
 import re
+from llms import talkto
 
 def read_config(filename="config.txt"):
     config = {}
@@ -85,9 +86,6 @@ def extract_base64_image(text):
     match = re.search(pattern, text)
     return match.group(0) if match else None
 
-def handle_save_dialog():
-    optimiseWait(['save', 'runcommand','resume','approve','proceed','proceed2','startnewtask'],clicks=[1,1,1,1,1,1,0],altpath=None)
-
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -139,7 +137,7 @@ def get_content_text(content: Union[str, List[Dict[str, str]], Dict[str, str]]) 
         return text
     return ""
 
-def handle_claude_interaction(prompt):
+def handle_llm_interaction(prompt):
     global last_request_time
     
     logger.info(f"Starting Claude interaction with prompt: {prompt}")
@@ -211,13 +209,6 @@ def handle_claude_interaction(prompt):
     response = win32clipboard.GetClipboardData()
     win32clipboard.CloseClipboard()
     
-    # Schedule the save dialog to be handled after response is returned
-    if autorun == "True":
-        print('TRUE')
-        Timer(0.5, handle_save_dialog).start()
-    else:
-        print('autorun false')
-    
     return response
 
 @app.route('/', methods=['GET'])
@@ -242,7 +233,7 @@ def chat_completions():
         is_streaming = data.get('stream', False)
         
         # Handle the Claude interaction
-        response = handle_claude_interaction(prompt)
+        response = handle_llm_interaction(prompt)
         
         if is_streaming:
             def generate():
