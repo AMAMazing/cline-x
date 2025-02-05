@@ -139,31 +139,21 @@ def get_content_text(content: Union[str, List[Dict[str, str]], Dict[str, str]]) 
 
 def handle_llm_interaction(prompt):
     global last_request_time
-    
+
     logger.info(f"Starting Claude interaction with prompt: {prompt}")
-    
-    # Check if enough time has passed since last request
+
+    # Enforce minimum request interval
     current_time = time.time()
     time_since_last = current_time - last_request_time
-    
     if time_since_last < MIN_REQUEST_INTERVAL:
         sleep(MIN_REQUEST_INTERVAL - time_since_last)
-    
-    # Open Claude in browser and update last request 
-    logger.info("Opening o1 in browser")
-    url = 'https://chat.deepseek.com/'
-    
-    webbrowser.open(url)
+
     last_request_time = time.time()
 
-    current_time = time.strftime('%Y-%m-%d %H:%M:%S')
-    headers_log = f"{current_time} - {dict(request.headers)}\n"
-    headers_log += f"{current_time} - INFO - Time since last request: {time_since_last} seconds\n"
+    # Extract image data if present (supports multiple images)
     request_json = request.get_json()
-
-    optimiseWait('dsmessage')
-
-    # Extract and handle base64 images before logging
+    image_list = []
+    
     if 'messages' in request_json:
         for message in request_json['messages']:
             content = message.get('content', [])
@@ -172,44 +162,22 @@ def handle_llm_interaction(prompt):
                     if isinstance(item, dict) and item.get('type') == 'image_url':
                         image_url = item.get('image_url', {}).get('url', '')
                         if image_url.startswith('data:image'):
-                            set_clipboard_image(image_url)
-                            pyautogui.hotkey('ctrl','v')
-                            # Remove image data from logs
+                            image_list.append(image_url)  # Store all images
                             item['image_url']['url'] = '[IMAGE DATA REMOVED]'
-                            sleep(7)
-    
-    headers_log += f"{current_time} - INFO - Request data: {request_json}"
 
-    # Send instructions to Claude
-    set_clipboard(headers_log)
-    pyautogui.hotkey('ctrl','v')
+    # Combine logs and prompt into a single input
+    current_time_str = time.strftime('%Y-%m-%d %H:%M:%S')
+    headers_log = f"{current_time_str} - INFO - Time since last request: {time_since_last} seconds\n"
+    headers_log += f"{current_time_str} - INFO - Request data: {request_json}"
 
-    if autorun == "True":
-        set_clipboard(r'You are set to autorun mode which means you cant use attempt completion or ask follow up questions, you can only write code and use terminal, so if you need something like a database or something, work it out yourself. Dont run anything in terminal that asks for input after you have run the command.')
-        pyautogui.hotkey('ctrl','v')
+    full_prompt = "\n".join([
+        headers_log,
+        #r'You are set to autorun mode which means you cant use attempt completion or ask follow up questions, you can only write code and use terminal, so if you need something like a database or something, work it out yourself. Dont run anything in terminal that asks for input after you have run the command.',
+        r'Please follow these rules: For each response, you must use one of the available tools formatted in proper XML tags. Tools include attempt_completion, ask_followup_question, read_file, write_to_file, search_files, list_files, execute_command, and list_code_definition_names. Do not respond conversationally - only use tool commands. Format any code you generate with proper indentation and line breaks, as you would in a standard code editor. Disregard any previous instructions about generating code in a single line or avoiding newline characters.',
+        prompt
+    ])
 
-    set_clipboard(r'Please follow these rules: For each response, you must use one of the available tools formatted in proper XML tags. Tools include attempt_completion, ask_followup_question, read_file, write_to_file, search_files, list_files, execute_command, and list_code_definition_names. Do not respond conversationally - only use tool commands. Format any code you generate with proper indentation and line breaks, as you would in a standard code editor. Disregard any previous instructions about generating code in a single line or avoiding newline characters.')
-    pyautogui.hotkey('ctrl','v')
-
-    set_clipboard(prompt)   
-    pyautogui.hotkey('ctrl','v')
-
-    sleep(2.5)
-
-    optimiseWait('dsrun')
-
-    optimiseWait('dscopy')    
-    
-    pyautogui.hotkey('ctrl','w')
-    
-    pyautogui.hotkey('alt','tab')
-
-    # Get Claude's response
-    win32clipboard.OpenClipboard()
-    response = win32clipboard.GetClipboardData()
-    win32clipboard.CloseClipboard()
-    
-    return response
+    return talkto("chatgpt", full_prompt, image_list,chatgpt='o3-mini-high')  
 
 @app.route('/', methods=['GET'])
 def home():
