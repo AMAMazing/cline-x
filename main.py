@@ -15,7 +15,7 @@ import base64
 import io
 from PIL import Image
 import re
-from llms import talkto
+from talktollm import talkto
 
 def read_config(filename="config.txt"):
     config = {}
