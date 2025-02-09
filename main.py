@@ -177,7 +177,7 @@ def handle_llm_interaction(prompt):
         prompt
     ])
 
-    return talkto("chatgpt", full_prompt, image_list,chatgpt='o3-mini-high')  
+    return talkto("gemini", full_prompt, image_list)  
 
 @app.route('/', methods=['GET'])
 def home():

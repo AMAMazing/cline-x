@@ -43,6 +43,9 @@ def talkto(llm, prompt, imagedata=None, chatgpt='o1'):
 
     webbrowser.open_new_tab(urls[llm])
 
+    if llm == 'chatgpt':
+        optimiseWait('loaded',clicks=0)
+
     optimiseWait('message',clicks=2)
 
     # If there are images, paste each one
@@ -65,13 +68,9 @@ def talkto(llm, prompt, imagedata=None, chatgpt='o1'):
     if llm != 'chatgpt':
         optimiseWait('copy')
     else:
-        if optimiseWait('copy',dontwait=True)['found'] == False:
-            print('False')
-        else:
-            print('True')
-        #while (optimiseWait('copy',dontwait=True)['found']) == 'False':
-        #    sleep(5)
-        #    pyautogui.scroll(-500)
+        while (optimiseWait('copy',dontwait=True)['found']) == False:
+            optimiseWait('down',dontwait=True)
+        optimiseWait('copy')
     
     pyautogui.hotkey('ctrl', 'w')
     
@@ -114,4 +113,4 @@ def set_clipboard_image(image_data, retries=3, delay=0.2):
 
 
 if __name__ == "__main__":
-    print(talkto('chatgpt','Hi',chatgpt='o3-mini-high'))
+    print(talkto('gemini','How to easily get element names and such for selenium or other headless webbrowser automation',chatgpt='o3-mini-high'))
