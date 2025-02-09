@@ -1,4 +1,4 @@
-# Cline X (Web interface)
+# Cline X (Local)
 
 A Python-based API bridge that enables Cline (VS Code Extension) to interact with the LLMs web interface, providing OpenAI-compatible API endpoints for seamless integration.
 
