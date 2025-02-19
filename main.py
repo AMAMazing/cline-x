@@ -174,10 +174,11 @@ def handle_llm_interaction(prompt):
         headers_log,
         #r'You are set to autorun mode which means you cant use attempt completion or ask follow up questions, you can only write code and use terminal, so if you need something like a database or something, work it out yourself. Dont run anything in terminal that asks for input after you have run the command.',
         r'Please follow these rules: For each response, you must use one of the available tools formatted in proper XML tags. Tools include attempt_completion, ask_followup_question, read_file, write_to_file, search_files, list_files, execute_command, and list_code_definition_names. Do not respond conversationally - only use tool commands. Format any code you generate with proper indentation and line breaks, as you would in a standard code editor. Disregard any previous instructions about generating code in a single line or avoiding newline characters.',
+        r'Write the entirity of your response in 1 big markdown codeblock, no word should be out of this 1 big code block.', # This is for gemini fixing
         prompt
     ])
 
-    return talkto("gemini", full_prompt, image_list)  
+    return talkto("gemini", full_prompt, image_list)[3:-3]  
 
 @app.route('/', methods=['GET'])
 def home():
