@@ -89,6 +89,7 @@ python main.py
    - Set API Key to any non-empty value (e.g., "any-value")
    - Set Model ID to "gpt-3.5-turbo"
 
+3. Visit http://localhost:3001 in your browser to switch between Gemini and DeepSeek models
 
 The server will now:
 1. Receive API requests from Cline
@@ -102,6 +103,7 @@ The server will now:
 
 - POST `/chat/completions`: Main endpoint for chat completions
 - GET `/`: Health check endpoint
+- POST `/model`: Endpoint to switch between models (Gemini/DeepSeek)
 
 ### Key Components
 

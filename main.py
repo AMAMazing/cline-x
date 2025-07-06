@@ -32,6 +32,9 @@ config = read_config()
 autorun = config.get('autorun')
 usefirefox = config.get('usefirefox', 'False') == 'True'
 
+# Model configuration - default to gemini
+current_model = config.get('model', 'gemini')
+
 import win32clipboard
 import time
 
@@ -140,7 +143,7 @@ def get_content_text(content: Union[str, List[Dict[str, str]], Dict[str, str]]) 
 def handle_llm_interaction(prompt):
     global last_request_time
 
-    logger.info(f"Starting Claude interaction with prompt: {prompt}")
+    logger.info(f"Starting {current_model} interaction with prompt: {prompt}")
 
     # Enforce minimum request interval
     current_time = time.time()
@@ -178,12 +181,361 @@ def handle_llm_interaction(prompt):
         prompt
     ])
 
-    return talkto("gemini", full_prompt, image_list)[:-3]  
+    return talkto(current_model, full_prompt, image_list)[:-3]  
 
 @app.route('/', methods=['GET'])
 def home():
     logger.info(f"GET request to / from {request.remote_addr}")
-    return "Claude API Bridge"
+    return f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>AI Model Bridge</title>
+        <style>
+            * {{
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }}
+            
+            body {{
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 20px;
+            }}
+            
+            .container {{
+                background: rgba(255, 255, 255, 0.95);
+                backdrop-filter: blur(10px);
+                border-radius: 20px;
+                padding: 40px;
+                max-width: 600px;
+                width: 100%;
+                box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+            }}
+            
+            h1 {{
+                text-align: center;
+                color: #333;
+                margin-bottom: 10px;
+                font-size: 2.5em;
+                font-weight: 700;
+                background: linear-gradient(135deg, #667eea, #764ba2);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+            }}
+            
+            .subtitle {{
+                text-align: center;
+                color: #666;
+                margin-bottom: 40px;
+                font-size: 1.1em;
+            }}
+            
+            .model-selector {{
+                background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+                border-radius: 15px;
+                padding: 30px;
+                margin: 30px 0;
+                border: 2px solid rgba(102, 126, 234, 0.1);
+                transition: all 0.3s ease;
+            }}
+            
+            .model-selector:hover {{
+                transform: translateY(-2px);
+                box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            }}
+            
+            .current-model {{
+                text-align: center;
+                margin-bottom: 25px;
+            }}
+            
+            .current-model h3 {{
+                color: #333;
+                margin-bottom: 10px;
+                font-size: 1.3em;
+            }}
+            
+            .model-badge {{
+                display: inline-block;
+                padding: 8px 20px;
+                border-radius: 25px;
+                font-weight: 600;
+                font-size: 1.1em;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                color: white;
+                background: linear-gradient(135deg, #667eea, #764ba2);
+                box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+            }}
+            
+            .button-group {{
+                display: flex;
+                gap: 15px;
+                justify-content: center;
+                flex-wrap: wrap;
+            }}
+            
+            .model-btn {{
+                background: linear-gradient(135deg, #667eea, #764ba2);
+                color: white;
+                border: none;
+                padding: 15px 30px;
+                border-radius: 50px;
+                font-size: 1.1em;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                min-width: 150px;
+            }}
+            
+            .model-btn:hover {{
+                transform: translateY(-3px);
+                box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+            }}
+            
+            .model-btn:active {{
+                transform: translateY(-1px);
+            }}
+            
+            .model-btn.gemini {{
+                background: linear-gradient(135deg, #4285f4, #34a853);
+            }}
+            
+            .model-btn.gemini:hover {{
+                box-shadow: 0 10px 30px rgba(66, 133, 244, 0.4);
+            }}
+            
+            .model-btn.deepseek {{
+                background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+            }}
+            
+            .model-btn.deepseek:hover {{
+                box-shadow: 0 10px 30px rgba(255, 107, 107, 0.4);
+            }}
+            
+            .status {{
+                margin-top: 20px;
+                padding: 15px;
+                border-radius: 10px;
+                text-align: center;
+                font-weight: 500;
+                opacity: 0;
+                transition: all 0.3s ease;
+            }}
+            
+            .status.show {{
+                opacity: 1;
+            }}
+            
+            .status.success {{
+                background: linear-gradient(135deg, #00b894, #00cec9);
+                color: white;
+            }}
+            
+            .status.error {{
+                background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+                color: white;
+            }}
+            
+            .info-section {{
+                margin-top: 40px;
+                padding: 25px;
+                background: rgba(102, 126, 234, 0.05);
+                border-radius: 15px;
+                border-left: 4px solid #667eea;
+            }}
+            
+            .info-section h3 {{
+                color: #333;
+                margin-bottom: 15px;
+                font-size: 1.2em;
+            }}
+            
+            .endpoint {{
+                background: rgba(255, 255, 255, 0.7);
+                padding: 12px;
+                border-radius: 8px;
+                margin: 8px 0;
+                font-family: 'Courier New', monospace;
+                font-size: 0.9em;
+                border-left: 3px solid #667eea;
+            }}
+            
+            .endpoint strong {{
+                color: #764ba2;
+            }}
+            
+            .loading {{
+                display: none;
+                margin-top: 10px;
+            }}
+            
+            .loading.show {{
+                display: block;
+            }}
+            
+            .spinner {{
+                border: 3px solid rgba(255, 255, 255, 0.3);
+                border-top: 3px solid white;
+                border-radius: 50%;
+                width: 20px;
+                height: 20px;
+                animation: spin 1s linear infinite;
+                display: inline-block;
+                margin-right: 10px;
+            }}
+            
+            @keyframes spin {{
+                0% {{ transform: rotate(0deg); }}
+                100% {{ transform: rotate(360deg); }}
+            }}
+            
+            @media (max-width: 600px) {{
+                .container {{
+                    padding: 25px;
+                    margin: 10px;
+                }}
+                
+                h1 {{
+                    font-size: 2em;
+                }}
+                
+                .button-group {{
+                    flex-direction: column;
+                }}
+                
+                .model-btn {{
+                    width: 100%;
+                }}
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🤖 AI Model Bridge</h1>
+            <p class="subtitle">Seamlessly switch between AI models</p>
+            
+            <div class="model-selector">
+                <div class="current-model">
+                    <h3>Active Model</h3>
+                    <span class="model-badge" id="currentModel">{current_model}</span>
+                </div>
+                
+                <div class="button-group">
+                    <button class="model-btn gemini" onclick="switchModel('gemini')">
+                        🧠 Gemini
+                    </button>
+                    <button class="model-btn deepseek" onclick="switchModel('deepseek')">
+                        🔍 DeepSeek
+                    </button>
+                </div>
+                
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    Switching model...
+                </div>
+                
+                <div class="status" id="status"></div>
+            </div>
+            
+            <div class="info-section">
+                <h3>📡 Available Endpoints</h3>
+                <div class="endpoint">
+                    <strong>POST</strong> /chat/completions - Main chat completion endpoint
+                </div>
+                <div class="endpoint">
+                    <strong>GET</strong> /model - Get current active model
+                </div>
+                <div class="endpoint">
+                    <strong>POST</strong> /model - Switch between models
+                </div>
+            </div>
+        </div>
+        
+        <script>
+            function switchModel(model) {{
+                const statusDiv = document.getElementById('status');
+                const loadingDiv = document.getElementById('loading');
+                const currentModelSpan = document.getElementById('currentModel');
+                
+                // Show loading
+                loadingDiv.classList.add('show');
+                statusDiv.classList.remove('show');
+                
+                fetch('/model', {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify({{'model': model}})
+                }})
+                .then(response => response.json())
+                .then(data => {{
+                    loadingDiv.classList.remove('show');
+                    
+                    if (data.success) {{
+                        currentModelSpan.textContent = data.model;
+                        statusDiv.className = 'status success show';
+                        statusDiv.innerHTML = '✅ Successfully switched to ' + data.model.toUpperCase();
+                        
+                        // Auto-hide success message after 3 seconds
+                        setTimeout(() => {{
+                            statusDiv.classList.remove('show');
+                        }}, 3000);
+                    }} else {{
+                        statusDiv.className = 'status error show';
+                        statusDiv.innerHTML = '❌ Error: ' + data.error;
+                    }}
+                }})
+                .catch(error => {{
+                    loadingDiv.classList.remove('show');
+                    statusDiv.className = 'status error show';
+                    statusDiv.innerHTML = '❌ Network error: ' + error.message;
+                }});
+            }}
+        </script>
+    </body>
+    </html>
+    """
+
+@app.route('/model', methods=['GET'])
+def get_model():
+    """Get current model"""
+    return jsonify({'model': current_model})
+
+@app.route('/model', methods=['POST'])
+def switch_model():
+    """Switch between models"""
+    global current_model
+    
+    try:
+        data = request.get_json()
+        if not data or 'model' not in data:
+            return jsonify({'success': False, 'error': 'Model not specified'}), 400
+        
+        new_model = data['model'].lower()
+        if new_model not in ['deepseek', 'gemini']:
+            return jsonify({'success': False, 'error': 'Invalid model. Use "deepseek" or "gemini"'}), 400
+        
+        current_model = new_model
+        logger.info(f"Model switched to: {current_model}")
+        
+        return jsonify({'success': True, 'model': current_model})
+    
+    except Exception as e:
+        logger.error(f"Error switching model: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/chat/completions', methods=['POST'])
 def chat_completions():
@@ -281,5 +633,5 @@ def chat_completions():
         return jsonify({'error': {'message': str(e)}}), 500
 
 if __name__ == '__main__':
-    logger.info("Starting Claude API Bridge server on port 3001")
+    logger.info(f"Starting Claude API Bridge server on port 3001 with default model: {current_model}")
     app.run(host="0.0.0.0", port=3001)
