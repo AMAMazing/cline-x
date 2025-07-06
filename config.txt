@@ -1,2 +1,3 @@
-autorun=False
-usefirefox=False
+autorun = "False"
+usefirefox = "False"
+model = "deepseek"
