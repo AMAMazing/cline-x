@@ -178,8 +178,6 @@ def handle_llm_interaction(prompt):
 @app.route('/', methods=['GET'])
 def home():
     logger.info(f"GET request to / from {request.remote_addr}")
-    # The long HTML string is unchanged, so it's omitted here for brevity.
-    # Just copy the HTML from your original file.
     return f"""
     <!DOCTYPE html>
     <html lang="en">
@@ -190,7 +188,7 @@ def home():
         <style>
             * {{ margin: 0; padding: 0; box-sizing: border-box; }}
             body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }}
-            .container {{ background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 20px; padding: 40px; max-width: 600px; width: 100%; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); }}
+            .container {{ background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 20px; padding: 40px; max-width: 700px; width: 100%; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); }}
             h1 {{ text-align: center; color: #333; margin-bottom: 10px; font-size: 2.5em; font-weight: 700; background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }}
             .subtitle {{ text-align: center; color: #666; margin-bottom: 40px; font-size: 1.1em; }}
             .model-selector {{ background: linear-gradient(135deg, #f8f9fa, #e9ecef); border-radius: 15px; padding: 30px; margin: 30px 0; border: 2px solid rgba(102, 126, 234, 0.1); transition: all 0.3s ease; }}
@@ -206,6 +204,8 @@ def home():
             .model-btn.gemini:hover {{ box-shadow: 0 10px 30px rgba(66, 133, 244, 0.4); }}
             .model-btn.deepseek {{ background: linear-gradient(135deg, #ff6b6b, #ee5a24); }}
             .model-btn.deepseek:hover {{ box-shadow: 0 10px 30px rgba(255, 107, 107, 0.4); }}
+            .model-btn.aistudio {{ background: linear-gradient(135deg, #9c27b0, #673ab7); }}
+            .model-btn.aistudio:hover {{ box-shadow: 0 10px 30px rgba(156, 39, 176, 0.4); }}
             .status {{ margin-top: 20px; padding: 15px; border-radius: 10px; text-align: center; font-weight: 500; opacity: 0; transition: all 0.3s ease; }}
             .status.show {{ opacity: 1; }}
             .status.success {{ background: linear-gradient(135deg, #00b894, #00cec9); color: white; }}
@@ -218,7 +218,7 @@ def home():
             .loading.show {{ display: block; }}
             .spinner {{ border: 3px solid rgba(255, 255, 255, 0.3); border-top: 3px solid white; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; margin-right: 10px; }}
             @keyframes spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}
-            @media (max-width: 600px) {{ .container {{ padding: 25px; margin: 10px; }} h1 {{ font-size: 2em; }} .button-group {{ flex-direction: column; }} .model-btn {{ width: 100%; }} }}
+            @media (max-width: 700px) {{ .container {{ padding: 25px; margin: 10px; }} h1 {{ font-size: 2em; }} .button-group {{ flex-direction: column; }} .model-btn {{ width: 100%; }} }}
         </style>
     </head>
     <body>
@@ -230,6 +230,7 @@ def home():
                 <div class="button-group">
                     <button class="model-btn gemini" onclick="switchModel('gemini')">🧠 Gemini</button>
                     <button class="model-btn deepseek" onclick="switchModel('deepseek')">🔍 DeepSeek</button>
+                    <button class="model-btn aistudio" onclick="switchModel('aistudio')">🎨 AIStudio</button>
                 </div>
                 <div class="loading" id="loading"><div class="spinner"></div>Switching model...</div>
                 <div class="status" id="status"></div>
@@ -239,6 +240,7 @@ def home():
                 <div class="endpoint"><strong>POST</strong> /chat/completions - Main chat completion endpoint</div>
                 <div class="endpoint"><strong>GET</strong> /model - Get current active model</div>
                 <div class="endpoint"><strong>POST</strong> /model - Switch between models</div>
+                <div class="endpoint"><strong>Supported Models:</strong> Gemini, DeepSeek, AIStudio</div>
             </div>
         </div>
         <script>
@@ -282,7 +284,7 @@ def get_model():
     """Get current model"""
     return jsonify({'model': current_model})
 
-# <<< CHANGE: THIS FUNCTION IS NOW MODIFIED TO SAVE THE SELECTION >>>
+# <<< CHANGE: UPDATED TO INCLUDE AISTUDIO >>>
 @app.route('/model', methods=['POST'])
 def switch_model():
     """Switch between models and save the choice to config.txt."""
@@ -295,8 +297,8 @@ def switch_model():
             return jsonify({'success': False, 'error': 'Model not specified'}), 400
         
         new_model = data['model'].lower()
-        if new_model not in ['deepseek', 'gemini']:
-            return jsonify({'success': False, 'error': 'Invalid model. Use "deepseek" or "gemini"'}), 400
+        if new_model not in ['deepseek', 'gemini', 'aistudio']:
+            return jsonify({'success': False, 'error': 'Invalid model. Use "deepseek", "gemini", or "aistudio"'}), 400
         
         # Update the model in memory
         current_model = new_model
