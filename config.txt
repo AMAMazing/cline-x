@@ -1,3 +1,4 @@
 autorun = "False"
 usefirefox = "False"
-model = "gemini"
+model = "aistudio"
+debug_mode = "True"

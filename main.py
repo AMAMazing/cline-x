@@ -35,13 +35,13 @@ def read_config(filename="config.txt"):
         default_config = {
             'autorun': 'False',
             'usefirefox': 'False',
-            'model': 'gemini'
+            'model': 'gemini',
+            'debug_mode': 'False'  # <<< CHANGE: Added default debug mode setting
         }
         write_config(default_config, filename)
         return default_config
     return config
 
-# <<< CHANGE: NEW FUNCTION TO WRITE TO THE CONFIG FILE >>>
 def write_config(config_data, filename="config.txt"):
     """Writes the configuration dictionary to the specified file."""
     with open(filename, 'w') as f:
@@ -56,6 +56,10 @@ usefirefox = config.get('usefirefox', 'False') == 'True'
 
 # Model configuration - default to gemini if not in config
 current_model = config.get('model', 'gemini')
+
+# <<< CHANGE: Added debug_mode configuration >>>
+# Read debug mode from config, default to False. Convert to boolean.
+debug_mode = config.get('debug_mode', 'False').lower() == 'true'
 
 
 # --- CLIPBOARD AND UTILITY FUNCTIONS ---
@@ -139,7 +143,7 @@ def get_content_text(content: Union[str, List[Dict[str, str]], Dict[str, str]]) 
 
 def handle_llm_interaction(prompt):
     global last_request_time
-    logger.info(f"Starting {current_model} interaction.")
+    logger.info(f"Starting {current_model} interaction. Debug mode is {'ON' if debug_mode else 'OFF'}.")
 
     current_time = time.time()
     time_since_last = current_time - last_request_time
@@ -171,13 +175,15 @@ def handle_llm_interaction(prompt):
         prompt
     ])
 
-    return talkto(current_model, full_prompt, image_list)[:-3]
+    # <<< CHANGE: Pass the debug_mode variable to the talkto function >>>
+    return talkto(current_model, full_prompt, image_list, debug=debug_mode)[:-3]
 
 # --- FLASK ROUTES ---
 
 @app.route('/', methods=['GET'])
 def home():
     logger.info(f"GET request to / from {request.remote_addr}")
+    debug_status_text = 'ON' if debug_mode else 'OFF'
     return f"""
     <!DOCTYPE html>
     <html lang="en">
@@ -196,6 +202,8 @@ def home():
             .current-model {{ text-align: center; margin-bottom: 25px; }}
             .current-model h3 {{ color: #333; margin-bottom: 10px; font-size: 1.3em; }}
             .model-badge {{ display: inline-block; padding: 8px 20px; border-radius: 25px; font-weight: 600; font-size: 1.1em; text-transform: uppercase; letter-spacing: 1px; color: white; background: linear-gradient(135deg, #667eea, #764ba2); box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3); }}
+            .debug-badge.on {{ background: linear-gradient(135deg, #ff6b6b, #ee5a24); }}
+            .debug-badge.off {{ background: linear-gradient(135deg, #00b894, #00cec9); }}
             .button-group {{ display: flex; gap: 15px; justify-content: center; flex-wrap: wrap; }}
             .model-btn {{ background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; padding: 15px 30px; border-radius: 50px; font-size: 1.1em; font-weight: 600; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3); text-transform: uppercase; letter-spacing: 0.5px; min-width: 150px; }}
             .model-btn:hover {{ transform: translateY(-3px); box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4); }}
@@ -206,6 +214,8 @@ def home():
             .model-btn.deepseek:hover {{ box-shadow: 0 10px 30px rgba(255, 107, 107, 0.4); }}
             .model-btn.aistudio {{ background: linear-gradient(135deg, #9c27b0, #673ab7); }}
             .model-btn.aistudio:hover {{ box-shadow: 0 10px 30px rgba(156, 39, 176, 0.4); }}
+            .btn-enable {{ background: linear-gradient(135deg, #ff6b6b, #ee5a24); }}
+            .btn-disable {{ background: linear-gradient(135deg, #00b894, #00cec9); }}
             .status {{ margin-top: 20px; padding: 15px; border-radius: 10px; text-align: center; font-weight: 500; opacity: 0; transition: all 0.3s ease; }}
             .status.show {{ opacity: 1; }}
             .status.success {{ background: linear-gradient(135deg, #00b894, #00cec9); color: white; }}
@@ -224,7 +234,8 @@ def home():
     <body>
         <div class="container">
             <h1>🤖 AI Model Bridge</h1>
-            <p class="subtitle">Seamlessly switch between AI models</p>
+            <p class="subtitle">Seamlessly switch between AI models and settings</p>
+            
             <div class="model-selector">
                 <div class="current-model"><h3>Active Model</h3><span class="model-badge" id="currentModel">{current_model.upper()}</span></div>
                 <div class="button-group">
@@ -233,19 +244,28 @@ def home():
                     <button class="model-btn aistudio" onclick="switchModel('aistudio')">🎨 AIStudio</button>
                 </div>
                 <div class="loading" id="loading"><div class="spinner"></div>Switching model...</div>
-                <div class="status" id="status"></div>
+                <div class="status" id="modelStatus"></div>
             </div>
+
+            <div class="model-selector">
+                <div class="current-model"><h3>Debug Mode</h3><span class="model-badge debug-badge {'on' if debug_mode else 'off'}" id="currentDebug">{debug_status_text}</span></div>
+                <div class="button-group">
+                    <button class="model-btn btn-enable" onclick="setDebug(true)">Enable</button>
+                    <button class="model-btn btn-disable" onclick="setDebug(false)">Disable</button>
+                </div>
+                <div class="status" id="debugStatus"></div>
+            </div>
+
             <div class="info-section">
                 <h3>📡 Available Endpoints</h3>
                 <div class="endpoint"><strong>POST</strong> /chat/completions - Main chat completion endpoint</div>
-                <div class="endpoint"><strong>GET</strong> /model - Get current active model</div>
-                <div class="endpoint"><strong>POST</strong> /model - Switch between models</div>
-                <div class="endpoint"><strong>Supported Models:</strong> Gemini, DeepSeek, AIStudio</div>
+                <div class="endpoint"><strong>GET/POST</strong> /model - Get or switch active model</div>
+                <div class="endpoint"><strong>GET/POST</strong> /debug - Get or toggle debug mode</div>
             </div>
         </div>
         <script>
             function switchModel(model) {{
-                const statusDiv = document.getElementById('status');
+                const statusDiv = document.getElementById('modelStatus');
                 const loadingDiv = document.getElementById('loading');
                 const currentModelSpan = document.getElementById('currentModel');
                 loadingDiv.classList.add('show');
@@ -274,6 +294,38 @@ def home():
                     statusDiv.innerHTML = '❌ Network error: ' + error.message;
                 }});
             }}
+
+            function setDebug(state) {{
+                const statusDiv = document.getElementById('debugStatus');
+                const currentDebugSpan = document.getElementById('currentDebug');
+                statusDiv.classList.remove('show');
+
+                fetch('/debug', {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify({{'debug': state}})
+                }})
+                .then(response => response.json())
+                .then(data => {{
+                    if (data.success) {{
+                        const newStatus = data.debug_mode ? 'ON' : 'OFF';
+                        currentDebugSpan.textContent = newStatus;
+                        // <<< FIX 1: Escaped JS template literal with double braces >>>
+                        currentDebugSpan.className = `model-badge debug-badge ${{newStatus.toLowerCase()}}`;
+                        statusDiv.className = 'status success show';
+                        // <<< FIX 2: Escaped JS template literal with double braces >>>
+                        statusDiv.innerHTML = `✅ Debug mode is now ${{newStatus}}`;
+                        setTimeout(() => {{ statusDiv.classList.remove('show'); }}, 3000);
+                    }} else {{
+                        statusDiv.className = 'status error show';
+                        statusDiv.innerHTML = '❌ Error: ' + data.error;
+                    }}
+                }})
+                .catch(error => {{
+                    statusDiv.className = 'status error show';
+                    statusDiv.innerHTML = '❌ Network error: ' + error.message;
+                }});
+            }}
         </script>
     </body>
     </html>
@@ -284,7 +336,6 @@ def get_model():
     """Get current model"""
     return jsonify({'model': current_model})
 
-# <<< CHANGE: UPDATED TO INCLUDE AISTUDIO >>>
 @app.route('/model', methods=['POST'])
 def switch_model():
     """Switch between models and save the choice to config.txt."""
@@ -300,19 +351,15 @@ def switch_model():
         if new_model not in ['deepseek', 'gemini', 'aistudio']:
             return jsonify({'success': False, 'error': 'Invalid model. Use "deepseek", "gemini", or "aistudio"'}), 400
         
-        # Update the model in memory
         current_model = new_model
         logger.info(f"Model switched to: {current_model}")
         
-        # --- Persist the change to the config file ---
         try:
-            config['model'] = current_model  # Update the config dictionary
-            write_config(config)             # Write the updated dictionary to file
+            config['model'] = current_model
+            write_config(config)
             logger.info(f"Saved model '{current_model}' to config.txt")
         except Exception as e:
-            # Log the error but don't fail the request, as the in-memory switch worked.
             logger.error(f"CRITICAL: Failed to save model to config.txt: {e}")
-        # ----------------------------------------------
         
         return jsonify({'success': True, 'model': current_model})
     
@@ -320,6 +367,39 @@ def switch_model():
         logger.error(f"Error switching model: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# <<< CHANGE: New route to get and set debug mode >>>
+@app.route('/debug', methods=['GET', 'POST'])
+def toggle_debug_mode():
+    """Get or set the debug mode status and save it to config.txt."""
+    global debug_mode
+    global config
+
+    if request.method == 'GET':
+        return jsonify({'debug_mode': debug_mode})
+    
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            if data is None or 'debug' not in data or not isinstance(data['debug'], bool):
+                return jsonify({'success': False, 'error': 'Invalid request. Send {"debug": true} or {"debug": false}'}), 400
+
+            new_state = data['debug']
+            debug_mode = new_state
+            status = "ON" if debug_mode else "OFF"
+            logger.info(f"Debug mode set to: {status}")
+
+            try:
+                config['debug_mode'] = str(debug_mode)
+                write_config(config)
+                logger.info(f"Saved debug_mode='{debug_mode}' to config.txt")
+            except Exception as e:
+                logger.error(f"CRITICAL: Failed to save debug_mode to config.txt: {e}")
+
+            return jsonify({'success': True, 'debug_mode': debug_mode})
+
+        except Exception as e:
+            logger.error(f"Error setting debug mode: {str(e)}")
+            return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/chat/completions', methods=['POST'])
 def chat_completions():
