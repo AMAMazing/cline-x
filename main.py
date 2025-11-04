@@ -39,8 +39,8 @@ def read_config(filename="config.txt"):
             'model': 'gemini',
             'debug_mode': 'False',
             'ntfy_topic': '',
-            'ntfy_notification_level': 'completion',
-            'theme': 'light' # Added: light, dark
+            'ntfy_notification_level': 'none',
+            'theme': 'dark' # Added: light, dark
         }
         write_config(default_config, filename)
         return default_config
@@ -65,10 +65,10 @@ current_model = config.get('model', 'gemini')
 debug_mode = config.get('debug_mode', 'False').lower() == 'true'
 
 # Read notification level from config, default to 'completion'.
-ntfy_notification_level = config.get('ntfy_notification_level', 'completion')
+ntfy_notification_level = config.get('ntfy_notification_level', 'none')
 
 # Read theme from config, default to 'light'
-current_theme = config.get('theme', 'light')
+current_theme = config.get('theme', 'dark')
 
 
 # --- NTFY NOTIFICATION ---
