@@ -39,7 +39,8 @@ def read_config(filename="config.txt"):
             'model': 'gemini',
             'debug_mode': 'False',
             'ntfy_topic': '',
-            'ntfy_notification_level': 'completion' # Added: none, completion, all
+            'ntfy_notification_level': 'completion',
+            'theme': 'light' # Added: light, dark
         }
         write_config(default_config, filename)
         return default_config
@@ -65,6 +66,9 @@ debug_mode = config.get('debug_mode', 'False').lower() == 'true'
 
 # Read notification level from config, default to 'completion'.
 ntfy_notification_level = config.get('ntfy_notification_level', 'completion')
+
+# Read theme from config, default to 'light'
+current_theme = config.get('theme', 'light')
 
 
 # --- NTFY NOTIFICATION ---
@@ -204,13 +208,13 @@ def handle_llm_interaction(prompt):
             if isinstance(content, list):
                 for item in content:
                     if isinstance(item, dict) and item.get('type') == 'image_url':
-                        image_url = item.get('image_url', {}).get('url', '')
+                        image_url = item.get('image_url', {}).get("url", '')
                         if image_url.startswith('data:image'):
                             image_list.append(image_url)
                             item['image_url']['url'] = '[IMAGE DATA REMOVED FOR LOGGING]'
 
     current_time_str = time.strftime('%Y-%m-%d %H:%M:%S')
-    headers_log = f"{current_time_str} - INFO - Request data: {request_json}"
+    headers_log = f"{current_time_str} - INFO - Request data: {json.dumps(request_json)}"
 
     full_prompt = "\n".join([
         headers_log,
@@ -245,6 +249,20 @@ def home():
                 --border-color: #E2E8F0;
                 --shadow-color: rgba(74, 107, 238, 0.15);
                 --toggle-bg: #CBD5E1;
+                --button-group-bg: #EDF2F7;
+            }}
+            body[data-theme="dark"] {{
+                --background-start: #111827;
+                --background-end: #0c121e;
+                --card-background: #1F2937;
+                --primary-color: #60A5FA;
+                --primary-hover: #3B82F6;
+                --text-color: #E5E7EB;
+                --text-light: #9CA3AF;
+                --border-color: #374151;
+                --shadow-color: rgba(96, 165, 250, 0.15);
+                --toggle-bg: #4B5563;
+                --button-group-bg: #374151;
             }}
             * {{ margin: 0; padding: 0; box-sizing: border-box; }}
             body {{
@@ -256,8 +274,10 @@ def home():
                 justify-content: center;
                 padding: 20px;
                 color: var(--text-color);
+                transition: background-color 0.3s, color 0.3s;
             }}
             .container {{
+                position: relative;
                 background: var(--card-background);
                 border-radius: 24px;
                 padding: 40px;
@@ -265,13 +285,14 @@ def home():
                 width: 100%;
                 box-shadow: 0 25px 50px -12px var(--shadow-color);
                 border: 1px solid var(--border-color);
+                transition: background-color 0.3s, border-color 0.3s;
             }}
             h1 {{
                 text-align: center;
                 margin-bottom: 8px;
                 font-size: 2.25em;
                 font-weight: 700;
-                background: linear-gradient(135deg, #4A6BEE, #764ba2);
+                background: linear-gradient(135deg, var(--primary-color), #764ba2);
                 -webkit-background-clip: text;
                 -webkit-text-fill-color: transparent;
                 background-clip: text;
@@ -296,7 +317,7 @@ def home():
                 gap: 10px;
                 justify-content: center;
                 flex-wrap: wrap;
-                background-color: var(--background-start);
+                background-color: var(--button-group-bg);
                 border-radius: 12px;
                 padding: 6px;
                 border: 1px solid var(--border-color);
@@ -330,8 +351,7 @@ def home():
             .model-btn.active:hover {{
                 background: var(--primary-hover);
             }}
-
-            .debug-section {{
+            .settings-row {{
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
@@ -375,27 +395,62 @@ def home():
             input:checked + .slider:before {{
                 transform: translateX(22px);
             }}
-            .status {{
-                margin-top: 15px;
-                padding: 10px;
-                border-radius: 8px;
-                text-align: center;
-                font-weight: 500;
-                font-size: 0.9em;
-                opacity: 0;
-                transform: translateY(-10px);
-                transition: all 0.3s ease;
+            .theme-toggle {{
+                position: absolute;
+                top: 20px;
+                right: 20px;
+                background: none;
+                border: none;
+                cursor: pointer;
+                padding: 8px;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: var(--text-light);
+                transition: color 0.2s, background-color 0.2s;
             }}
-            .status.show {{
-                opacity: 1;
-                transform: translateY(0);
+            .theme-toggle:hover {{
+                background-color: var(--button-group-bg);
             }}
-            .status.success {{ background-color: #E6F7F0; color: #0D9488; }}
-            .status.error {{ background-color: #FFF1F2; color: #E11D48; }}
+            .theme-toggle svg {{
+                width: 20px;
+                height: 20px;
+            }}
+            .theme-toggle .sun-icon {{ display: none; }}
+            .theme-toggle .moon-icon {{ display: block; }}
+            body[data-theme="dark"] .theme-toggle .sun-icon {{ display: block; }}
+            body[data-theme="dark"] .theme-toggle .moon-icon {{ display: none; }}
         </style>
     </head>
-    <body>
+    <body data-theme="{current_theme}">
         <div class="container">
+            <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+                <svg
+                class="sun-icon" 
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="12" cy="12" r="5" />
+  <line x1="12" y1="1" x2="12" y2="3" />
+  <line x1="12" y1="21" x2="12" y2="23" />
+  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+  <line x1="1" y1="12" x2="3" y2="12" />
+  <line x1="21" y1="12" x2="23" y2="12" />
+  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+</svg>
+
+<svg class="moon-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M9.528 1.718a.75.75 0 01.162.819A8.97 8.97 0 009 6a9 9 0 009 9 8.97 8.97 0 003.463-.69a.75.75 0 01.981.98 10.503 10.503 0 01-9.694 6.46c-5.799 0-10.5-4.701-10.5-10.5 0-3.51 1.713-6.635 4.342-8.532a.75.75 0 01.818.162z" clip-rule="evenodd"></path></svg>
+            </button>
             <h1>🤖 AI Bridge</h1>
             <p class="subtitle">Switch models and settings instantly.</p>
             
@@ -409,7 +464,7 @@ def home():
             </div>
 
             <div class="control-section">
-                 <div class="debug-section">
+                 <div class="settings-row">
                     <h3>Debug Mode</h3>
                     <label class="toggle-switch">
                         <input type="checkbox" id="debugToggle" {'checked' if debug_mode else ''} onchange="setDebug(this.checked)">
@@ -426,20 +481,9 @@ def home():
                     <button class="model-btn {'active' if ntfy_notification_level == 'all' else ''}" onclick="setNotificationLevel(this, 'all')">All Responses</button>
                 </div>
             </div>
-
-            <div id="status-container" class="status"></div>
         </div>
 
         <script>
-            function showStatus(message, isError = false) {{
-                const statusDiv = document.getElementById('status-container');
-                statusDiv.textContent = message;
-                statusDiv.className = `status ${{isError ? 'error' : 'success'}} show`;
-                setTimeout(() => {{
-                    statusDiv.classList.remove('show');
-                }}, 3000);
-            }}
-
             function updateActiveButton(groupElement, clickedButton) {{
                 groupElement.querySelectorAll('.model-btn').forEach(btn => {{
                     btn.classList.remove('active');
@@ -456,13 +500,11 @@ def home():
                 }})
                 .then(response => response.json())
                 .then(data => {{
-                    if (data.success) {{
-                        showStatus('Switched to ' + data.model.toUpperCase());
-                    }} else {{
-                        showStatus('Error: ' + data.error, true);
+                    if (!data.success) {{
+                        console.error('Error: ' + data.error);
                     }}
                 }})
-                .catch(error => showStatus('Network error: ' + error.message, true));
+                .catch(error => console.error('Network error: ' + error.message));
             }}
 
             function setDebug(state) {{
@@ -473,28 +515,19 @@ def home():
                 }})
                 .then(response => response.json())
                 .then(data => {{
-                    if (data.success) {{
-                        showStatus(`Debug mode is now ${{data.debug_mode ? 'ON' : 'OFF'}}`);
-                    }} else {{
-                        showStatus('Error: ' + data.error, true);
-                        // Revert toggle if API call fails
+                    if (!data.success) {{
+                        console.error('Failed to save debug state:', data.error);
                         document.getElementById('debugToggle').checked = !state;
                     }}
                 }})
                 .catch(error => {{
-                    showStatus('Network error: ' + error.message, true);
+                    console.error('Network error saving debug state:', error);
                     document.getElementById('debugToggle').checked = !state;
                 }});
             }}
 
             function setNotificationLevel(btn, level) {{
                 updateActiveButton(document.getElementById('notification-group'), btn);
-                const levelDisplayMap = {{
-                    'none': 'None',
-                    'completion': 'Completions Only',
-                    'all': 'All Responses'
-                }};
-
                 fetch('/notifications', {{
                     method: 'POST',
                     headers: {{'Content-Type': 'application/json'}},
@@ -502,13 +535,39 @@ def home():
                 }})
                 .then(response => response.json())
                 .then(data => {{
-                    if (data.success) {{
-                        showStatus(`Notifications set to: ${{levelDisplayMap[data.level]}}`);
-                    }} else {{
-                        showStatus('Error: ' + data.error, true);
+                    if (!data.success) {{
+                        console.error('Error: ' + data.error);
                     }}
                 }})
-                .catch(error => showStatus('Network error: ' + error.message, true));
+                .catch(error => console.error('Network error: ' + error.message));
+            }}
+            
+            function setTheme(theme) {{
+                document.body.dataset.theme = theme;
+                fetch('/theme', {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify({{'theme': theme}})
+                }})
+                .then(response => response.json())
+                .then(data => {{
+                    if (!data.success) {{
+                        console.error('Failed to save theme:', data.error);
+                        const revertedTheme = theme === 'dark' ? 'light' : 'dark';
+                        document.body.dataset.theme = revertedTheme;
+                    }}
+                }})
+                .catch(error => {{
+                    console.error('Network error saving theme:', error);
+                    const revertedTheme = theme === 'dark' ? 'light' : 'dark';
+                    document.body.dataset.theme = revertedTheme;
+                }});
+            }}
+
+            function toggleTheme() {{
+                const currentTheme = document.body.dataset.theme;
+                const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+                setTheme(newTheme);
             }}
         </script>
     </body>
@@ -618,6 +677,42 @@ def notification_settings():
         except Exception as e:
             logger.error(f"Error setting notification level: {str(e)}")
             return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/theme', methods=['GET', 'POST'])
+def theme_settings():
+    """Get or set the UI theme and save it to config.txt."""
+    global current_theme
+    global config
+
+    if request.method == 'GET':
+        return jsonify({'theme': current_theme})
+    
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            if data is None or 'theme' not in data:
+                return jsonify({'success': False, 'error': 'Invalid request. Send {"theme": "theme_name"}'}), 400
+            
+            new_theme = data['theme'].lower()
+            if new_theme not in ['light', 'dark']:
+                return jsonify({'success': False, 'error': 'Invalid theme. Use "light" or "dark".'}), 400
+
+            current_theme = new_theme
+            logger.info(f"Theme set to: {current_theme}")
+
+            try:
+                config['theme'] = current_theme
+                write_config(config)
+                logger.info(f"Saved theme='{current_theme}' to config.txt")
+            except Exception as e:
+                logger.error(f"CRITICAL: Failed to save theme to config.txt: {e}")
+
+            return jsonify({'success': True, 'theme': current_theme})
+
+        except Exception as e:
+            logger.error(f"Error setting theme: {str(e)}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/chat/completions', methods=['POST'])
 def chat_completions():
