@@ -17,3 +17,5 @@ dist/
 build/
 coverage/
 .cache/
+
+config.txt

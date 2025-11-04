@@ -1,4 +1,0 @@
-autorun = "False"
-usefirefox = "False"
-model = "aistudio"
-debug_mode = "True"

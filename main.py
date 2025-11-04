@@ -16,6 +16,7 @@ import io
 from PIL import Image
 import re
 from talktollm import talkto
+import requests # Added for sending notifications
 
 # --- CONFIGURATION HANDLING ---
 
@@ -36,7 +37,8 @@ def read_config(filename="config.txt"):
             'autorun': 'False',
             'usefirefox': 'False',
             'model': 'gemini',
-            'debug_mode': 'False'  # <<< CHANGE: Added default debug mode setting
+            'debug_mode': 'False',
+            'ntfy_topic': ''  # Added default ntfy topic setting
         }
         write_config(default_config, filename)
         return default_config
@@ -57,9 +59,47 @@ usefirefox = config.get('usefirefox', 'False') == 'True'
 # Model configuration - default to gemini if not in config
 current_model = config.get('model', 'gemini')
 
-# <<< CHANGE: Added debug_mode configuration >>>
 # Read debug mode from config, default to False. Convert to boolean.
 debug_mode = config.get('debug_mode', 'False').lower() == 'true'
+
+
+# --- NTFY NOTIFICATION ---
+
+def send_ntfy_notification(topic: str, simple_title: str, full_content: str):
+    """
+    Sends a push notification via ntfy.sh with a simple title and detailed content.
+
+    Args:
+        topic (str): The ntfy.sh URL topic to publish to.
+        simple_title (str): The short message to be displayed as the notification title.
+        full_content (str): The full message content, visible inside the ntfy app.
+    """
+    # Only proceed if the user has configured an ntfy topic in config.txt
+    if not topic:
+        logger.info("ntfy_topic not configured. Skipping notification.")
+        return
+
+    try:
+        # Send an HTTP POST request to the ntfy topic URL
+        response = requests.post(
+            topic,
+            # The main body of the request contains the full, detailed message from the AI
+            data=full_content.encode('utf-8'),
+            headers={
+                # The 'Title' header sets the simple, visible notification title
+                "Title": simple_title,
+                # 'Priority' makes the notification stand out on the device
+                "Priority": "high",
+                # 'Tags' adds a party popper emoji icon to the notification
+                "Tags": "tada"
+            }
+        )
+        # Check if the request was successful (e.g., status code 200)
+        response.raise_for_status()
+        logger.info(f"Successfully sent ntfy notification to topic: {topic}")
+    except requests.exceptions.RequestException as e:
+        # Log an error if the notification fails to send
+        logger.error(f"Failed to send ntfy notification: {e}")
 
 
 # --- CLIPBOARD AND UTILITY FUNCTIONS ---
@@ -175,8 +215,7 @@ def handle_llm_interaction(prompt):
         prompt
     ])
 
-    # <<< CHANGE: Pass the debug_mode variable to the talkto function >>>
-    return talkto(current_model, full_prompt, image_list, debug=debug_mode)[:-3]
+    return talkto(current_model, full_prompt, image_list, debug=debug_mode)
 
 # --- FLASK ROUTES ---
 
@@ -310,10 +349,8 @@ def home():
                     if (data.success) {{
                         const newStatus = data.debug_mode ? 'ON' : 'OFF';
                         currentDebugSpan.textContent = newStatus;
-                        // <<< FIX 1: Escaped JS template literal with double braces >>>
                         currentDebugSpan.className = `model-badge debug-badge ${{newStatus.toLowerCase()}}`;
                         statusDiv.className = 'status success show';
-                        // <<< FIX 2: Escaped JS template literal with double braces >>>
                         statusDiv.innerHTML = `✅ Debug mode is now ${{newStatus}}`;
                         setTimeout(() => {{ statusDiv.classList.remove('show'); }}, 3000);
                     }} else {{
@@ -367,7 +404,6 @@ def switch_model():
         logger.error(f"Error switching model: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# <<< CHANGE: New route to get and set debug mode >>>
 @app.route('/debug', methods=['GET', 'POST'])
 def toggle_debug_mode():
     """Get or set the debug mode status and save it to config.txt."""
@@ -418,6 +454,17 @@ def chat_completions():
         
         response = handle_llm_interaction(prompt)
         
+        # Check if the AI's response indicates a task completion attempt
+        if "<attempt_completion>" in response:
+            # Get the ntfy topic URL from the loaded configuration
+            ntfy_topic = config.get('ntfy_topic', '')
+            # Send the notification with a simple title and the full AI response as the body
+            send_ntfy_notification(
+                topic=ntfy_topic,
+                simple_title="Cline-x: Task Completion", # The simple alert title
+                full_content=response  # The entire raw response from the AI
+            )
+        
         if is_streaming:
             def generate():
                 response_id = f"chatcmpl-{request_id}"
@@ -431,7 +478,6 @@ def chat_completions():
                 for line in lines:
                     chunk = {"id": response_id, "object": "chat.completion.chunk", "created": int(time.time()), "model": "gpt-3.5-turbo", "choices": [{"index": 0, "delta": {"content": line}, "finish_reason": None}]}
                     yield f"data: {json.dumps(chunk)}\n\n"
-                    # sleep(0.01) # Optional small delay
                 
                 # End stream
                 chunk = {"id": response_id, "object": "chat.completion.chunk", "created": int(time.time()), "model": "gpt-3.5-turbo", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
