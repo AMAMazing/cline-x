@@ -38,7 +38,8 @@ def read_config(filename="config.txt"):
             'usefirefox': 'False',
             'model': 'gemini',
             'debug_mode': 'False',
-            'ntfy_topic': ''  # Added default ntfy topic setting
+            'ntfy_topic': '',
+            'ntfy_notification_level': 'completion' # Added: none, completion, all
         }
         write_config(default_config, filename)
         return default_config
@@ -61,6 +62,9 @@ current_model = config.get('model', 'gemini')
 
 # Read debug mode from config, default to False. Convert to boolean.
 debug_mode = config.get('debug_mode', 'False').lower() == 'true'
+
+# Read notification level from config, default to 'completion'.
+ntfy_notification_level = config.get('ntfy_notification_level', 'completion')
 
 
 # --- NTFY NOTIFICATION ---
@@ -222,7 +226,6 @@ def handle_llm_interaction(prompt):
 @app.route('/', methods=['GET'])
 def home():
     logger.info(f"GET request to / from {request.remote_addr}")
-    debug_status_text = 'ON' if debug_mode else 'OFF'
     return f"""
     <!DOCTYPE html>
     <html lang="en">
@@ -231,84 +234,221 @@ def home():
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>AI Model Bridge</title>
         <style>
+            :root {{
+                --background-start: #F4F7FC;
+                --background-end: #E6EBF5;
+                --card-background: #FFFFFF;
+                --primary-color: #4A6BEE;
+                --primary-hover: #3859d4;
+                --text-color: #334155;
+                --text-light: #64748B;
+                --border-color: #E2E8F0;
+                --shadow-color: rgba(74, 107, 238, 0.15);
+                --toggle-bg: #CBD5E1;
+            }}
             * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }}
-            .container {{ background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 20px; padding: 40px; max-width: 700px; width: 100%; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); }}
-            h1 {{ text-align: center; color: #333; margin-bottom: 10px; font-size: 2.5em; font-weight: 700; background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }}
-            .subtitle {{ text-align: center; color: #666; margin-bottom: 40px; font-size: 1.1em; }}
-            .model-selector {{ background: linear-gradient(135deg, #f8f9fa, #e9ecef); border-radius: 15px; padding: 30px; margin: 30px 0; border: 2px solid rgba(102, 126, 234, 0.1); transition: all 0.3s ease; }}
-            .model-selector:hover {{ transform: translateY(-2px); box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); }}
-            .current-model {{ text-align: center; margin-bottom: 25px; }}
-            .current-model h3 {{ color: #333; margin-bottom: 10px; font-size: 1.3em; }}
-            .model-badge {{ display: inline-block; padding: 8px 20px; border-radius: 25px; font-weight: 600; font-size: 1.1em; text-transform: uppercase; letter-spacing: 1px; color: white; background: linear-gradient(135deg, #667eea, #764ba2); box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3); }}
-            .debug-badge.on {{ background: linear-gradient(135deg, #ff6b6b, #ee5a24); }}
-            .debug-badge.off {{ background: linear-gradient(135deg, #00b894, #00cec9); }}
-            .button-group {{ display: flex; gap: 15px; justify-content: center; flex-wrap: wrap; }}
-            .model-btn {{ background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; padding: 15px 30px; border-radius: 50px; font-size: 1.1em; font-weight: 600; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3); text-transform: uppercase; letter-spacing: 0.5px; min-width: 150px; }}
-            .model-btn:hover {{ transform: translateY(-3px); box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4); }}
-            .model-btn:active {{ transform: translateY(-1px); }}
-            .model-btn.gemini {{ background: linear-gradient(135deg, #4285f4, #34a853); }}
-            .model-btn.gemini:hover {{ box-shadow: 0 10px 30px rgba(66, 133, 244, 0.4); }}
-            .model-btn.deepseek {{ background: linear-gradient(135deg, #ff6b6b, #ee5a24); }}
-            .model-btn.deepseek:hover {{ box-shadow: 0 10px 30px rgba(255, 107, 107, 0.4); }}
-            .model-btn.aistudio {{ background: linear-gradient(135deg, #9c27b0, #673ab7); }}
-            .model-btn.aistudio:hover {{ box-shadow: 0 10px 30px rgba(156, 39, 176, 0.4); }}
-            .btn-enable {{ background: linear-gradient(135deg, #ff6b6b, #ee5a24); }}
-            .btn-disable {{ background: linear-gradient(135deg, #00b894, #00cec9); }}
-            .status {{ margin-top: 20px; padding: 15px; border-radius: 10px; text-align: center; font-weight: 500; opacity: 0; transition: all 0.3s ease; }}
-            .status.show {{ opacity: 1; }}
-            .status.success {{ background: linear-gradient(135deg, #00b894, #00cec9); color: white; }}
-            .status.error {{ background: linear-gradient(135deg, #ff6b6b, #ee5a24); color: white; }}
-            .info-section {{ margin-top: 40px; padding: 25px; background: rgba(102, 126, 234, 0.05); border-radius: 15px; border-left: 4px solid #667eea; }}
-            .info-section h3 {{ color: #333; margin-bottom: 15px; font-size: 1.2em; }}
-            .endpoint {{ background: rgba(255, 255, 255, 0.7); padding: 12px; border-radius: 8px; margin: 8px 0; font-family: 'Courier New', monospace; font-size: 0.9em; border-left: 3px solid #667eea; }}
-            .endpoint strong {{ color: #764ba2; }}
-            .loading {{ display: none; margin-top: 10px; }}
-            .loading.show {{ display: block; }}
-            .spinner {{ border: 3px solid rgba(255, 255, 255, 0.3); border-top: 3px solid white; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; margin-right: 10px; }}
-            @keyframes spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}
-            @media (max-width: 700px) {{ .container {{ padding: 25px; margin: 10px; }} h1 {{ font-size: 2em; }} .button-group {{ flex-direction: column; }} .model-btn {{ width: 100%; }} }}
+            body {{
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+                background: linear-gradient(135deg, var(--background-start) 0%, var(--background-end) 100%);
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 20px;
+                color: var(--text-color);
+            }}
+            .container {{
+                background: var(--card-background);
+                border-radius: 24px;
+                padding: 40px;
+                max-width: 500px;
+                width: 100%;
+                box-shadow: 0 25px 50px -12px var(--shadow-color);
+                border: 1px solid var(--border-color);
+            }}
+            h1 {{
+                text-align: center;
+                margin-bottom: 8px;
+                font-size: 2.25em;
+                font-weight: 700;
+                background: linear-gradient(135deg, #4A6BEE, #764ba2);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+            }}
+            .subtitle {{
+                text-align: center;
+                color: var(--text-light);
+                margin-bottom: 40px;
+                font-size: 1.1em;
+            }}
+            .control-section {{
+                margin-bottom: 30px;
+            }}
+            .control-section h3 {{
+                font-size: 1.1em;
+                font-weight: 600;
+                margin-bottom: 16px;
+                color: var(--text-color);
+            }}
+            .button-group {{
+                display: flex;
+                gap: 10px;
+                justify-content: center;
+                flex-wrap: wrap;
+                background-color: var(--background-start);
+                border-radius: 12px;
+                padding: 6px;
+                border: 1px solid var(--border-color);
+            }}
+            .model-btn {{
+                flex: 1;
+                background: transparent;
+                color: var(--text-light);
+                border: none;
+                padding: 12px 10px;
+                border-radius: 9px;
+                font-size: 0.9em;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 8px;
+                white-space: nowrap;
+            }}
+            .model-btn:hover {{
+                color: var(--primary-color);
+                background-color: rgba(74, 107, 238, 0.1);
+            }}
+            .model-btn.active {{
+                background: var(--primary-color);
+                color: white;
+                box-shadow: 0 4px 12px var(--shadow-color);
+            }}
+            .model-btn.active:hover {{
+                background: var(--primary-hover);
+            }}
+
+            .debug-section {{
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }}
+            .toggle-switch {{
+                position: relative;
+                display: inline-block;
+                width: 50px;
+                height: 28px;
+            }}
+            .toggle-switch input {{
+                opacity: 0;
+                width: 0;
+                height: 0;
+            }}
+            .slider {{
+                position: absolute;
+                cursor: pointer;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background-color: var(--toggle-bg);
+                transition: .4s;
+                border-radius: 28px;
+            }}
+            .slider:before {{
+                position: absolute;
+                content: "";
+                height: 20px;
+                width: 20px;
+                left: 4px;
+                bottom: 4px;
+                background-color: white;
+                transition: .4s;
+                border-radius: 50%;
+            }}
+            input:checked + .slider {{
+                background-color: var(--primary-color);
+            }}
+            input:checked + .slider:before {{
+                transform: translateX(22px);
+            }}
+            .status {{
+                margin-top: 15px;
+                padding: 10px;
+                border-radius: 8px;
+                text-align: center;
+                font-weight: 500;
+                font-size: 0.9em;
+                opacity: 0;
+                transform: translateY(-10px);
+                transition: all 0.3s ease;
+            }}
+            .status.show {{
+                opacity: 1;
+                transform: translateY(0);
+            }}
+            .status.success {{ background-color: #E6F7F0; color: #0D9488; }}
+            .status.error {{ background-color: #FFF1F2; color: #E11D48; }}
         </style>
     </head>
     <body>
         <div class="container">
-            <h1>🤖 AI Model Bridge</h1>
-            <p class="subtitle">Seamlessly switch between AI models and settings</p>
+            <h1>🤖 AI Bridge</h1>
+            <p class="subtitle">Switch models and settings instantly.</p>
             
-            <div class="model-selector">
-                <div class="current-model"><h3>Active Model</h3><span class="model-badge" id="currentModel">{current_model.upper()}</span></div>
-                <div class="button-group">
-                    <button class="model-btn gemini" onclick="switchModel('gemini')">🧠 Gemini</button>
-                    <button class="model-btn deepseek" onclick="switchModel('deepseek')">🔍 DeepSeek</button>
-                    <button class="model-btn aistudio" onclick="switchModel('aistudio')">🎨 AIStudio</button>
+            <div class="control-section">
+                <h3>Active Model</h3>
+                <div class="button-group" id="model-group">
+                    <button class="model-btn {'active' if current_model == 'gemini' else ''}" onclick="switchModel(this, 'gemini')">🧠 Gemini</button>
+                    <button class="model-btn {'active' if current_model == 'deepseek' else ''}" onclick="switchModel(this, 'deepseek')">🔍 DeepSeek</button>
+                    <button class="model-btn {'active' if current_model == 'aistudio' else ''}" onclick="switchModel(this, 'aistudio')">🎨 AIStudio</button>
                 </div>
-                <div class="loading" id="loading"><div class="spinner"></div>Switching model...</div>
-                <div class="status" id="modelStatus"></div>
             </div>
 
-            <div class="model-selector">
-                <div class="current-model"><h3>Debug Mode</h3><span class="model-badge debug-badge {'on' if debug_mode else 'off'}" id="currentDebug">{debug_status_text}</span></div>
-                <div class="button-group">
-                    <button class="model-btn btn-enable" onclick="setDebug(true)">Enable</button>
-                    <button class="model-btn btn-disable" onclick="setDebug(false)">Disable</button>
-                </div>
-                <div class="status" id="debugStatus"></div>
+            <div class="control-section">
+                 <div class="debug-section">
+                    <h3>Debug Mode</h3>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="debugToggle" {'checked' if debug_mode else ''} onchange="setDebug(this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                 </div>
             </div>
 
-            <div class="info-section">
-                <h3>📡 Available Endpoints</h3>
-                <div class="endpoint"><strong>POST</strong> /chat/completions - Main chat completion endpoint</div>
-                <div class="endpoint"><strong>GET/POST</strong> /model - Get or switch active model</div>
-                <div class="endpoint"><strong>GET/POST</strong> /debug - Get or toggle debug mode</div>
+            <div class="control-section">
+                <h3>Notification Level</h3>
+                <div class="button-group" id="notification-group">
+                    <button class="model-btn {'active' if ntfy_notification_level == 'none' else ''}" onclick="setNotificationLevel(this, 'none')">None</button>
+                    <button class="model-btn {'active' if ntfy_notification_level == 'completion' else ''}" onclick="setNotificationLevel(this, 'completion')">Completions</button>
+                    <button class="model-btn {'active' if ntfy_notification_level == 'all' else ''}" onclick="setNotificationLevel(this, 'all')">All Responses</button>
+                </div>
             </div>
+
+            <div id="status-container" class="status"></div>
         </div>
+
         <script>
-            function switchModel(model) {{
-                const statusDiv = document.getElementById('modelStatus');
-                const loadingDiv = document.getElementById('loading');
-                const currentModelSpan = document.getElementById('currentModel');
-                loadingDiv.classList.add('show');
-                statusDiv.classList.remove('show');
+            function showStatus(message, isError = false) {{
+                const statusDiv = document.getElementById('status-container');
+                statusDiv.textContent = message;
+                statusDiv.className = `status ${{isError ? 'error' : 'success'}} show`;
+                setTimeout(() => {{
+                    statusDiv.classList.remove('show');
+                }}, 3000);
+            }}
+
+            function updateActiveButton(groupElement, clickedButton) {{
+                groupElement.querySelectorAll('.model-btn').forEach(btn => {{
+                    btn.classList.remove('active');
+                }});
+                clickedButton.classList.add('active');
+            }}
+            
+            function switchModel(btn, model) {{
+                updateActiveButton(document.getElementById('model-group'), btn);
                 fetch('/model', {{
                     method: 'POST',
                     headers: {{'Content-Type': 'application/json'}},
@@ -316,29 +456,16 @@ def home():
                 }})
                 .then(response => response.json())
                 .then(data => {{
-                    loadingDiv.classList.remove('show');
                     if (data.success) {{
-                        currentModelSpan.textContent = data.model.toUpperCase();
-                        statusDiv.className = 'status success show';
-                        statusDiv.innerHTML = '✅ Successfully switched to ' + data.model.toUpperCase();
-                        setTimeout(() => {{ statusDiv.classList.remove('show'); }}, 3000);
+                        showStatus('Switched to ' + data.model.toUpperCase());
                     }} else {{
-                        statusDiv.className = 'status error show';
-                        statusDiv.innerHTML = '❌ Error: ' + data.error;
+                        showStatus('Error: ' + data.error, true);
                     }}
                 }})
-                .catch(error => {{
-                    loadingDiv.classList.remove('show');
-                    statusDiv.className = 'status error show';
-                    statusDiv.innerHTML = '❌ Network error: ' + error.message;
-                }});
+                .catch(error => showStatus('Network error: ' + error.message, true));
             }}
 
             function setDebug(state) {{
-                const statusDiv = document.getElementById('debugStatus');
-                const currentDebugSpan = document.getElementById('currentDebug');
-                statusDiv.classList.remove('show');
-
                 fetch('/debug', {{
                     method: 'POST',
                     headers: {{'Content-Type': 'application/json'}},
@@ -347,21 +474,41 @@ def home():
                 .then(response => response.json())
                 .then(data => {{
                     if (data.success) {{
-                        const newStatus = data.debug_mode ? 'ON' : 'OFF';
-                        currentDebugSpan.textContent = newStatus;
-                        currentDebugSpan.className = `model-badge debug-badge ${{newStatus.toLowerCase()}}`;
-                        statusDiv.className = 'status success show';
-                        statusDiv.innerHTML = `✅ Debug mode is now ${{newStatus}}`;
-                        setTimeout(() => {{ statusDiv.classList.remove('show'); }}, 3000);
+                        showStatus(`Debug mode is now ${{data.debug_mode ? 'ON' : 'OFF'}}`);
                     }} else {{
-                        statusDiv.className = 'status error show';
-                        statusDiv.innerHTML = '❌ Error: ' + data.error;
+                        showStatus('Error: ' + data.error, true);
+                        // Revert toggle if API call fails
+                        document.getElementById('debugToggle').checked = !state;
                     }}
                 }})
                 .catch(error => {{
-                    statusDiv.className = 'status error show';
-                    statusDiv.innerHTML = '❌ Network error: ' + error.message;
+                    showStatus('Network error: ' + error.message, true);
+                    document.getElementById('debugToggle').checked = !state;
                 }});
+            }}
+
+            function setNotificationLevel(btn, level) {{
+                updateActiveButton(document.getElementById('notification-group'), btn);
+                const levelDisplayMap = {{
+                    'none': 'None',
+                    'completion': 'Completions Only',
+                    'all': 'All Responses'
+                }};
+
+                fetch('/notifications', {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify({{'level': level}})
+                }})
+                .then(response => response.json())
+                .then(data => {{
+                    if (data.success) {{
+                        showStatus(`Notifications set to: ${{levelDisplayMap[data.level]}}`);
+                    }} else {{
+                        showStatus('Error: ' + data.error, true);
+                    }}
+                }})
+                .catch(error => showStatus('Network error: ' + error.message, true));
             }}
         </script>
     </body>
@@ -437,6 +584,41 @@ def toggle_debug_mode():
             logger.error(f"Error setting debug mode: {str(e)}")
             return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/notifications', methods=['GET', 'POST'])
+def notification_settings():
+    """Get or set the ntfy notification level and save it to config.txt."""
+    global ntfy_notification_level
+    global config
+
+    if request.method == 'GET':
+        return jsonify({'level': ntfy_notification_level})
+    
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            if data is None or 'level' not in data:
+                return jsonify({'success': False, 'error': 'Invalid request. Send {"level": "level_name"}'}), 400
+            
+            new_level = data['level'].lower()
+            if new_level not in ['none', 'completion', 'all']:
+                return jsonify({'success': False, 'error': 'Invalid level. Use "none", "completion", or "all".'}), 400
+
+            ntfy_notification_level = new_level
+            logger.info(f"Notification level set to: {ntfy_notification_level}")
+
+            try:
+                config['ntfy_notification_level'] = ntfy_notification_level
+                write_config(config)
+                logger.info(f"Saved ntfy_notification_level='{ntfy_notification_level}' to config.txt")
+            except Exception as e:
+                logger.error(f"CRITICAL: Failed to save notification level to config.txt: {e}")
+
+            return jsonify({'success': True, 'level': ntfy_notification_level})
+
+        except Exception as e:
+            logger.error(f"Error setting notification level: {str(e)}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/chat/completions', methods=['POST'])
 def chat_completions():
     try:
@@ -454,15 +636,19 @@ def chat_completions():
         
         response = handle_llm_interaction(prompt)
         
-        # Check if the AI's response indicates a task completion attempt
-        if "<attempt_completion>" in response:
-            # Get the ntfy topic URL from the loaded configuration
-            ntfy_topic = config.get('ntfy_topic', '')
-            # Send the notification with a simple title and the full AI response as the body
+        # Check notification settings and send notifications accordingly
+        ntfy_topic = config.get('ntfy_topic', '')
+        if ntfy_notification_level == 'all':
             send_ntfy_notification(
                 topic=ntfy_topic,
-                simple_title="Cline-x: Task Completion", # The simple alert title
-                full_content=response  # The entire raw response from the AI
+                simple_title="Cline-x: AI Response",
+                full_content=response
+            )
+        elif ntfy_notification_level == 'completion' and "<attempt_completion>" in response:
+            send_ntfy_notification(
+                topic=ntfy_topic,
+                simple_title="Cline-x: Task Completion",
+                full_content=response
             )
         
         if is_streaming:
