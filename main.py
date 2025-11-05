@@ -73,7 +73,7 @@ current_theme = config.get('theme', 'dark')
 
 # --- NTFY NOTIFICATION ---
 
-def send_ntfy_notification(topic: str, simple_title: str, full_content: str):
+def send_ntfy_notification(topic: str, simple_title: str, full_content: str, tags: str = "tada"):
     """
     Sends a push notification via ntfy.sh with a simple title and detailed content.
 
@@ -81,6 +81,7 @@ def send_ntfy_notification(topic: str, simple_title: str, full_content: str):
         topic (str): The ntfy.sh URL topic to publish to.
         simple_title (str): The short message to be displayed as the notification title.
         full_content (str): The full message content, visible inside the ntfy app.
+        tags (str): Comma-separated list of ntfy tags (emojis).
     """
     # Only proceed if the user has configured an ntfy topic in config.txt
     if not topic:
@@ -95,11 +96,12 @@ def send_ntfy_notification(topic: str, simple_title: str, full_content: str):
             data=full_content.encode('utf-8'),
             headers={
                 # The 'Title' header sets the simple, visible notification title
-                "Title": simple_title,
+                # FIX: Encode the title to UTF-8 to prevent UnicodeEncodeError with emojis
+                "Title": simple_title.encode('utf-8'),
                 # 'Priority' makes the notification stand out on the device
                 "Priority": "high",
-                # 'Tags' adds a party popper emoji icon to the notification
-                "Tags": "tada"
+                # 'Tags' adds an emoji icon to the notification
+                "Tags": tags
             }
         )
         # Check if the request was successful (e.g., status code 200)
@@ -216,12 +218,19 @@ def handle_llm_interaction(prompt):
     current_time_str = time.strftime('%Y-%m-%d %H:%M:%S')
     headers_log = f"{current_time_str} - INFO - Request data: {json.dumps(request_json)}"
 
-    full_prompt = "\n".join([
+    prompt_instructions = [
         headers_log,
         r'Please follow these rules: For each response, you must use one of the available tools formatted in proper XML tags. Tools include attempt_completion, ask_followup_question, read_file, write_to_file, search_files, list_files, execute_command, and list_code_definition_names. Do not respond conversationally - only use tool commands. Format any code you generate with proper indentation and line breaks, as you would in a standard code editor. Disregard any previous instructions about generating code in a single line or avoiding newline characters.',
         r'Write the entirity of your response in 1 big markdown codeblock, no word should be out of this 1 big code block and do not write a md codeblock within this big codeblock',
-        prompt
-    ])
+    ]
+
+    if ntfy_notification_level == 'all':
+        summary_instruction = r"You MUST include a `<summary>` tag inside your `<thinking>` block for every tool call. This summary should be a very brief, user-friendly explanation of the action you are about to take. For example: `<summary>Reading the project's configuration to check dependencies.</summary>` or `<summary>Completing the user's request by providing the full Python script.</summary>`."
+        prompt_instructions.append(summary_instruction)
+
+    prompt_instructions.append(prompt)
+    full_prompt = "\n".join(prompt_instructions)
+
 
     return talkto(current_model, full_prompt, image_list, debug=debug_mode)
 
@@ -733,17 +742,31 @@ def chat_completions():
         
         # Check notification settings and send notifications accordingly
         ntfy_topic = config.get('ntfy_topic', '')
+        
         if ntfy_notification_level == 'all':
-            send_ntfy_notification(
-                topic=ntfy_topic,
-                simple_title="Cline-x: AI Response",
-                full_content=response
-            )
+            summary_match = re.search(r"<summary>(.*?)</summary>", response, re.DOTALL)
+            summary = summary_match.group(1).strip() if summary_match else None
+
+            if "<attempt_completion>" in response:
+                send_ntfy_notification(
+                    topic=ntfy_topic,
+                    simple_title="Cline-x: Task Completion",
+                    full_content=summary or "Task completion submitted.",
+                    tags="tada"
+                )
+            elif summary:
+                send_ntfy_notification(
+                    topic=ntfy_topic,
+                    simple_title="🤖 Cline-x: AI Response",
+                    full_content=summary,
+                    tags="robot_face"
+                )
         elif ntfy_notification_level == 'completion' and "<attempt_completion>" in response:
             send_ntfy_notification(
                 topic=ntfy_topic,
-                simple_title="Cline-x: Task Completion",
-                full_content=response
+                simple_title="Cline-x: Task Completion 🎉",
+                full_content=response,
+                tags="tada"
             )
         
         if is_streaming:
