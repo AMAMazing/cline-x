@@ -175,105 +175,23 @@ set_altpath(r"D:\cline-x-claudeweb\images\alt1440")
 
 # --- CORE LOGIC FUNCTIONS ---
 
-def extract_images_from_text(text: str) -> tuple[str, list[str]]:
-    """
-    Extracts base64 image data from text content and returns cleaned text + image list.
-    
-    Args:
-        text: The text content that may contain embedded image data
-        
-    Returns:
-        tuple: (cleaned_text, image_list)
-            - cleaned_text: Text with image data removed and replaced with placeholders
-            - image_list: List of data URIs for images found
-    """
-    image_list = []
-    
-    # This pattern seems to be for a different format, but we'll keep it.
-    # The primary extraction happens in get_content_text_and_images for OpenAI format.
-    pattern = re.compile(
-        r'media_type.*?[\'\\"](?P<mtype>image/[a-zA-Z]+)[\'\\"]'
-        r'.*?'
-        r'data.*?[\'\\"](?P<base64>[a-zA-Z0-9+/=]{50,})[\'\\"]',
-        re.DOTALL
-    )
-    
-    matches = list(pattern.finditer(text))
-    
-    # Build list of unique images (deduplicate)
-    seen = set()
-    for match in matches:
-        media_type = match.group('mtype')
-        base64_data = match.group('base64')
-        if media_type and base64_data:
-            full_data_uri = f"data:{media_type};base64,{base64_data}"
-            if full_data_uri not in seen:
-                image_list.append(full_data_uri)
-                seen.add(full_data_uri)
-    
-    # Remove image data from text, replace with placeholder
-    cleaned_text = text
-    if matches:
-        # Only replace if custom pattern matches were found
-        for i, match in enumerate(matches):
-            cleaned_text = cleaned_text.replace(match.group(0), f"[Image {i+1} uploaded]", 1)
-    
-    return cleaned_text, image_list
-
-
-def get_content_text_and_images(content) -> tuple[str, list[str]]:
-    """
-    Extracts text and images from message content.
-    Handles both string content and structured list content (OpenAI API format).
-    
-    Returns:
-        tuple: (text_content, image_list)
-    """
-    image_list = []
-    
+def get_content_text(content: Union[str, List[Dict[str, str]], Dict[str, str]]) -> str:
     if isinstance(content, str):
-        # Content is a string - extract embedded images using regex
-        text, images = extract_images_from_text(content)
-        return text, images
-        
+        return content
     elif isinstance(content, list):
-        # Content is structured list (OpenAI API format)
-        text_parts = []
-        image_count = 0
+        parts = []
         for item in content:
             if item.get("type") == "text":
-                # Extract any embedded images from text parts too
-                text, images = extract_images_from_text(item.get("text", ""))
-                text_parts.append(text)
-                image_list.extend(images)
-                
-            elif item.get("type") == "image_url":
-                # Handle OpenAI API format image_url
+                parts.append(item["text"])
+            elif item.get("type") == "image_url": # OpenAI API format
                 image_data = item.get("image_url", {}).get("url", "")
                 if image_data.startswith('data:image'):
-                    image_list.append(image_data)
-                    image_count += 1
-                    # Use a placeholder that won't be confused with the text content
-                    text_parts.append(f"[Image {image_count} uploaded]")
-                    
-        return "\n".join(text_parts), list(set(image_list)) # Deduplicate images
-        
-    return "", []
+                    set_clipboard_image(image_data)
+                parts.append(f"[Image: An uploaded image]")
+        return "\n".join(parts)
+    return ""
 
-
-# Replace the existing get_content_text function with this:
-def get_content_text(content):
-    """Legacy function - use get_content_text_and_images instead"""
-    text, _ = get_content_text_and_images(content)
-    return text
-
-
-# Updated handle_llm_interaction function
-def handle_llm_interaction(prompt_text, image_list=None, request_data_for_log=None):
-    """
-    Handles the interaction with the LLM, including prompt construction,
-    logging, and cleaning of repeated context.
-    """
+def handle_llm_interaction(prompt):
     global last_request_time
     logger.info(f"Starting {current_model} interaction. Debug mode is {'ON' if debug_mode else 'OFF'}.")
 
@@ -283,50 +201,22 @@ def handle_llm_interaction(prompt_text, image_list=None, request_data_for_log=No
         sleep(MIN_REQUEST_INTERVAL - time_since_last)
     last_request_time = time.time()
 
-    current_time_str = time.strftime('%Y-%m-%d %H:%M:%S')
-
-    # Create detailed log header with sanitized JSON request data
-    if request_data_for_log:
-        try:
-            # Create a deep copy to avoid modifying the original request object
-            log_data = json.loads(json.dumps(request_data_for_log))
-            if 'messages' in log_data:
-                for message in log_data['messages']:
-                    content = message.get('content', [])
-                    if isinstance(content, list):
-                        for item in content:
-                            if item.get('type') == 'image_url':
-                                if 'image_url' in item and 'url' in item['image_url']:
-                                    item['image_url']['url'] = '[IMAGE DATA REMOVED FOR LOGGING]'
-            headers_log = f"{current_time_str} - INFO - Request data: {json.dumps(log_data)}"
-        except Exception as e:
-            logger.error(f"Failed to create sanitized log data: {e}")
-            headers_log = f"{current_time_str} - INFO - Request received with {len(image_list or [])} image(s). (Log sanitization failed)"
-    else:
-        headers_log = f"{current_time_str} - INFO - Request received with {len(image_list or [])} image(s)"
-
-    # FIX: De-duplicate repeating context blocks sent by the client.
-    # The client can sometimes send multiple <environment_details> blocks. We only want the last one.
-    context_block_pattern = re.compile(r"<environment_details>.*?</environment_details>", re.DOTALL)
-    matches = list(context_block_pattern.finditer(prompt_text))
+    request_json = request.get_json()
+    image_list = []
     
-    if len(matches) > 1:
-        logger.info(f"Found {len(matches)} repeating context blocks. Cleaning up prompt.")
-        # We build a new string by taking slices of the original, skipping the parts we want to remove.
-        new_prompt_parts = []
-        last_end = 0
-        # Iterate through all matches that need to be removed (all except the last one).
-        for match in matches[:-1]:
-            # Append the text from the end of the last removed block to the start of the current one.
-            new_prompt_parts.append(prompt_text[last_end:match.start()])
-            # Move the pointer to the end of the current block, effectively skipping it.
-            last_end = match.end()
-        
-        # Finally, append the rest of the string from the end of the last removed block.
-        # This will include the final (and desired) context block.
-        new_prompt_parts.append(prompt_text[last_end:])
-        
-        prompt_text = "".join(new_prompt_parts)
+    if 'messages' in request_json:
+        for message in request_json['messages']:
+            content = message.get('content', [])
+            if isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict) and item.get('type') == 'image_url':
+                        image_url = item.get('image_url', {}).get("url", '')
+                        if image_url.startswith('data:image'):
+                            image_list.append(image_url)
+                            item['image_url']['url'] = '[IMAGE DATA REMOVED FOR LOGGING]'
+
+    current_time_str = time.strftime('%Y-%m-%d %H:%M:%S')
+    headers_log = f"{current_time_str} - INFO - Request data: {json.dumps(request_json)}"
 
     prompt_instructions = [
         headers_log,
@@ -338,12 +228,11 @@ def handle_llm_interaction(prompt_text, image_list=None, request_data_for_log=No
         summary_instruction = r"You MUST include a `<summary>` tag inside your `<thinking>` block for every tool call. This summary should be a very brief, user-friendly explanation of the action you are about to take. For example: `<summary>Reading the project's configuration to check dependencies.</summary>` or `<summary>Completing the user's request by providing the full Python script.</summary>`."
         prompt_instructions.append(summary_instruction)
 
-    # Append the user's full prompt (which includes history from the client)
-    prompt_instructions.append(prompt_text)
+    prompt_instructions.append(prompt)
     full_prompt = "\n".join(prompt_instructions)
 
-    # Pass both prompt and the already-extracted images to talkto
-    return talkto(current_model, full_prompt, imagedata=image_list if image_list else None, debug=debug_mode)
+
+    return talkto(current_model, full_prompt, image_list, debug=debug_mode)
 
 # --- FLASK ROUTES ---
 
@@ -834,29 +723,22 @@ def theme_settings():
             return jsonify({'success': False, 'error': str(e)}), 500
 
 
-# Updated chat_completions route
 @app.route('/chat/completions', methods=['POST'])
 def chat_completions():
     try:
         data = request.get_json()
-        logger.debug(f"Request data received")
+        logger.debug(f"Request data: {data}") # Use debug for verbose data
         
         if not data or 'messages' not in data:
             return jsonify({'error': {'message': 'Invalid request format'}}), 400
 
         last_message = data['messages'][-1]
-        
-        # Use the new function to separate text and images
-        prompt_text, image_list = get_content_text_and_images(last_message.get('content', ''))
-        
-        if image_list:
-            logger.info(f"Extracted {len(image_list)} image(s) from the prompt")
+        prompt = get_content_text(last_message.get('content', ''))
         
         request_id = str(int(time.time()))
         is_streaming = data.get('stream', False)
         
-        # Call the updated handle_llm_interaction with separated data and original data for logging
-        response = handle_llm_interaction(prompt_text, image_list, request_data_for_log=data)
+        response = handle_llm_interaction(prompt)
         
         # Check notification settings and send notifications accordingly
         ntfy_topic = config.get('ntfy_topic', '')
@@ -896,7 +778,7 @@ def chat_completions():
                 yield f"data: {json.dumps(chunk)}\n\n"
                 
                 # Stream line by line
-                lines = response.splitlines(True)
+                lines = response.splitlines(True) # Keep newlines
                 for line in lines:
                     chunk = {"id": response_id, "object": "chat.completion.chunk", "created": int(time.time()), "model": "gpt-3.5-turbo", "choices": [{"index": 0, "delta": {"content": line}, "finish_reason": None}]}
                     yield f"data: {json.dumps(chunk)}\n\n"
@@ -914,7 +796,7 @@ def chat_completions():
             'created': int(time.time()),
             'model': 'gpt-3.5-turbo',
             'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': response}, 'finish_reason': 'stop'}],
-            'usage': {'prompt_tokens': len(prompt_text), 'completion_tokens': len(response), 'total_tokens': len(prompt_text) + len(response)}
+            'usage': {'prompt_tokens': len(prompt), 'completion_tokens': len(response), 'total_tokens': len(prompt) + len(response)}
         })
     
     except Exception as e:
