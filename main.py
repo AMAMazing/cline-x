@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, Response
+from flask import Flask, jsonify, request, Response, abort
 import webbrowser
 import win32clipboard
 import time
@@ -16,104 +16,153 @@ import io
 from PIL import Image
 import re
 from talktollm import talkto
-import requests # Added for sending notifications
+import requests
+import secrets
+from functools import wraps
+from pyngrok import ngrok
+import sys
+from dotenv import load_dotenv, set_key
+import colorama
+from ascii import art as attempt_completion_art
+from ascii import banner as bannertop
+
+# --- PATH HANDLING for frozen executables ---
+def get_app_path():
+    """Get the appropriate path for the application's data files."""
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    else:
+        return os.path.dirname(os.path.abspath(__file__))
+
+APP_PATH = get_app_path()
+DOTENV_PATH = os.path.join(APP_PATH, '.env')
+
+load_dotenv(dotenv_path=DOTENV_PATH)
 
 # --- CONFIGURATION HANDLING ---
+def get_config_path():
+    return os.path.join(APP_PATH, "config.txt")
 
-def read_config(filename="config.txt"):
+def read_config():
     """Reads the configuration file and returns a dictionary."""
     config = {}
+    config_path = get_config_path()
     try:
-        with open(filename, 'r') as f:
+        with open(config_path, 'r') as f:
             for line in f:
                 line = line.strip()
                 if '=' in line and not line.startswith('#'):
                     key, value = line.split('=', 1)
                     config[key.strip()] = value.strip().strip('"').strip("'")
     except FileNotFoundError:
-        # If config.txt doesn't exist, create it with default values
-        print(f"'{filename}' not found. Creating with default settings.")
+        print(f"'{config_path}' not found. Creating with default settings.")
         default_config = {
-            'autorun': 'False',
-            'usefirefox': 'False',
             'model': 'gemini',
-            'debug_mode': 'False',
+            'theme': 'dark',
             'ntfy_topic': '',
             'ntfy_notification_level': 'none',
-            'theme': 'dark' # Added: light, dark
+            'terminal_log_level': 'default',
+            'terminal_alert_level': 'none',
+            'remote_enabled': 'False'
         }
-        write_config(default_config, filename)
+        write_config(default_config)
         return default_config
     return config
 
-def write_config(config_data, filename="config.txt"):
+def write_config(config_data):
     """Writes the configuration dictionary to the specified file."""
-    with open(filename, 'w') as f:
+    with open(get_config_path(), 'w') as f:
         for key, value in config_data.items():
-            # Write in key = "value" format for consistency
             f.write(f'{key} = "{value}"\n')
 
 # Load initial configuration
 config = read_config()
-autorun = config.get('autorun')
-usefirefox = config.get('usefirefox', 'False') == 'True'
-
-# Model configuration - default to gemini if not in config
 current_model = config.get('model', 'gemini')
-
-# Read debug mode from config, default to False. Convert to boolean.
-debug_mode = config.get('debug_mode', 'False').lower() == 'true'
-
-# Read notification level from config, default to 'completion'.
-ntfy_notification_level = config.get('ntfy_notification_level', 'none')
-
-# Read theme from config, default to 'light'
 current_theme = config.get('theme', 'dark')
+ntfy_notification_level = config.get('ntfy_notification_level', 'none')
+terminal_log_level = config.get('terminal_log_level', 'default')
+terminal_alert_level = config.get('terminal_alert_level', 'none')
+remote_enabled = config.get('remote_enabled', 'False').lower() == 'true'
 
+# --- State for clearing the alert ---
+alert_lines_printed = 0
+alert_active = False
+
+# --- API Key (only used when remote is enabled) ---
+API_KEY = secrets.token_urlsafe(32)
+
+def require_api_key(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if not remote_enabled:
+            return func(*args, **kwargs)
+        if request.headers.get('X-API-Key') == API_KEY or request.headers.get('Authorization', '').replace('Bearer ', '') == API_KEY:
+            return func(*args, **kwargs)
+        abort(401, description="Invalid or missing API key")
+    return wrapper
+
+# --- LOGGING SETUP ---
+class CustomFormatter(logging.Formatter):
+    """Custom formatter that respects terminal_log_level"""
+    def format(self, record):
+        if terminal_log_level == 'none':
+            return ''
+        elif terminal_log_level == 'minimal':
+            # Only show specific messages in a simple format
+            if 'Starting' in record.msg or 'notification' in record.msg.lower():
+                # Remove timestamps and level for minimal
+                if 'Starting' in record.msg:
+                    return f"Starting {current_model.upper()} interaction"
+                elif 'Successfully sent' in record.msg:
+                    return "Sent notification"
+                return ''
+            return ''
+        elif terminal_log_level == 'debug':
+            # Show everything including debug messages
+            return super().format(record)
+        else:  # default
+            # Standard INFO level formatting
+            if record.levelno >= logging.INFO:
+                return super().format(record)
+            return ''
+
+# Setup logging with custom formatter
+handler = logging.StreamHandler()
+handler.setFormatter(CustomFormatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+logger = logging.getLogger(__name__)
+logger.addHandler(handler)
+logger.setLevel(logging.DEBUG if terminal_log_level == 'debug' else logging.INFO)
+
+app = Flask(__name__)
+last_request_time = 0
+MIN_REQUEST_INTERVAL = 5
+
+set_autopath(r"D:\cline-x-claudeweb\images")
+set_altpath(r"D:\cline-x-claudeweb\images\alt1440")
 
 # --- NTFY NOTIFICATION ---
-
 def send_ntfy_notification(topic: str, simple_title: str, full_content: str, tags: str = "tada"):
-    """
-    Sends a push notification via ntfy.sh with a simple title and detailed content.
-
-    Args:
-        topic (str): The ntfy.sh URL topic to publish to.
-        simple_title (str): The short message to be displayed as the notification title.
-        full_content (str): The full message content, visible inside the ntfy app.
-        tags (str): Comma-separated list of ntfy tags (emojis).
-    """
-    # Only proceed if the user has configured an ntfy topic in config.txt
+    """Sends a push notification via ntfy.sh"""
     if not topic:
-        logger.info("ntfy_topic not configured. Skipping notification.")
+        logger.debug("ntfy_topic not configured. Skipping notification.")
         return
 
     try:
-        # Send an HTTP POST request to the ntfy topic URL
         response = requests.post(
             topic,
-            # The main body of the request contains the full, detailed message from the AI
             data=full_content.encode('utf-8'),
             headers={
-                # The 'Title' header sets the simple, visible notification title
-                # FIX: Encode the title to UTF-8 to prevent UnicodeEncodeError with emojis
                 "Title": simple_title.encode('utf-8'),
-                # 'Priority' makes the notification stand out on the device
                 "Priority": "high",
-                # 'Tags' adds an emoji icon to the notification
                 "Tags": tags
             }
         )
-        # Check if the request was successful (e.g., status code 200)
         response.raise_for_status()
         logger.info(f"Successfully sent ntfy notification to topic: {topic}")
     except requests.exceptions.RequestException as e:
-        # Log an error if the notification fails to send
         logger.error(f"Failed to send ntfy notification: {e}")
 
-
-# --- CLIPBOARD AND UTILITY FUNCTIONS ---
-
+# --- CLIPBOARD FUNCTIONS ---
 def set_clipboard(text, retries=3, delay=0.2):
     for i in range(retries):
         try:
@@ -127,13 +176,15 @@ def set_clipboard(text, retries=3, delay=0.2):
             return
         except pywintypes.error as e:
             if e.winerror == 5:
-                print(f"Clipboard access denied. Retrying... (Attempt {i+1}/{retries})")
+                if terminal_log_level == 'debug':
+                    print(f"Clipboard access denied. Retrying... (Attempt {i+1}/{retries})")
                 time.sleep(delay)
             else:
                 raise
         except Exception as e:
             raise
-    print(f"Failed to set clipboard after {retries} attempts.")
+    if terminal_log_level == 'debug':
+        print(f"Failed to set clipboard after {retries} attempts.")
 
 def set_clipboard_image(image_data):
     try:
@@ -149,32 +200,89 @@ def set_clipboard_image(image_data):
         win32clipboard.CloseClipboard()
         return True
     except Exception as e:
-        print(f"Error setting image to clipboard: {e}")
+        if terminal_log_level == 'debug':
+            print(f"Error setting image to clipboard: {e}")
         return False
 
-def extract_base64_image(text):
-    pattern = r'data:image\/[^;]+;base64,[a-zA-Z0-9+/]+=*'
-    match = re.search(pattern, text)
-    return match.group(0) if match else None
+# --- ALERT CLEARING FUNCTIONS ---
+def clear_previous_alert():
+    """Clear any previous alert from the terminal using multiple methods."""
+    global alert_lines_printed, alert_active
+    
+    if not alert_active or alert_lines_printed <= 0:
+        return
+    
+    try:
+        if os.name == 'nt':
+            sys.stdout.write(f"\033[{alert_lines_printed}A")
+            sys.stdout.write("\033[J")
+        else:
+            sys.stdout.write(f"\x1b[{alert_lines_printed}A")
+            sys.stdout.write("\x1b[J")
+        sys.stdout.flush()
+    except Exception:
+        try:
+            terminal_height = os.get_terminal_size().lines
+            print("\n" * min(alert_lines_printed + 5, terminal_height))
+        except Exception:
+            print("\n" * (alert_lines_printed + 3))
+    
+    alert_lines_printed = 0
+    alert_active = False
 
-# --- LOGGING AND FLASK APP SETUP ---
+def print_completion_alert():
+    """Prints a completion alert and tracks it for later clearing."""
+    global alert_lines_printed, alert_active
+    
+    clear_previous_alert()
+    
+    border_char = "#"
+    border_width = 80
+    border_top = colorama.Fore.YELLOW + colorama.Style.BRIGHT + (border_char * border_width)
+    border_bottom = colorama.Fore.YELLOW + colorama.Style.BRIGHT + (border_char * border_width)
+    colored_art = colorama.Fore.GREEN + colorama.Style.BRIGHT + attempt_completion_art + colorama.Style.RESET_ALL
+    
+    alert_lines = [
+        "",
+        border_top,
+        *colored_art.strip().split('\n'),
+        border_bottom,
+        ""
+    ]
+    
+    alert_lines_printed = len(alert_lines)
+    alert_active = True
+    
+    for line in alert_lines:
+        print(line)
+    
+    sys.stdout.flush()
 
-logging.basicConfig(
-    level=logging.INFO, # Changed to INFO for less verbose production logs
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-logger = logging.getLogger(__name__)
+def print_summary_alert(summary: str):
+    """Prints a summary message in a highlighted format."""
+    global alert_lines_printed, alert_active
+    
+    # Don't clear previous alert for summaries, just print below
+    
+    border = colorama.Fore.CYAN + colorama.Style.BRIGHT + "=" * 60
+    title = colorama.Fore.CYAN + colorama.Style.BRIGHT + "📋 AI Summary:"
+    content = colorama.Fore.WHITE + colorama.Style.BRIGHT + summary
+    
+    alert_message = [
+        "",
+        border,
+        title,
+        content,
+        border,
+        ""
+    ]
+    
+    for line in alert_message:
+        print(line)
+    
+    sys.stdout.flush()
 
-app = Flask(__name__)
-last_request_time = 0
-MIN_REQUEST_INTERVAL = 5
-
-set_autopath(r"D:\cline-x-claudeweb\images")
-set_altpath(r"D:\cline-x-claudeweb\images\alt1440")
-
-# --- CORE LOGIC FUNCTIONS ---
-
+# --- CORE LOGIC ---
 def get_content_text(content: Union[str, List[Dict[str, str]], Dict[str, str]]) -> str:
     if isinstance(content, str):
         return content
@@ -183,7 +291,7 @@ def get_content_text(content: Union[str, List[Dict[str, str]], Dict[str, str]]) 
         for item in content:
             if item.get("type") == "text":
                 parts.append(item["text"])
-            elif item.get("type") == "image_url": # OpenAI API format
+            elif item.get("type") == "image_url":
                 image_data = item.get("image_url", {}).get("url", "")
                 if image_data.startswith('data:image'):
                     set_clipboard_image(image_data)
@@ -193,7 +301,9 @@ def get_content_text(content: Union[str, List[Dict[str, str]], Dict[str, str]]) 
 
 def handle_llm_interaction(prompt):
     global last_request_time
-    logger.info(f"Starting {current_model} interaction. Debug mode is {'ON' if debug_mode else 'OFF'}.")
+    clear_previous_alert()
+    
+    logger.info(f"Starting {current_model} interaction.")
 
     current_time = time.time()
     time_since_last = current_time - last_request_time
@@ -213,8 +323,8 @@ def handle_llm_interaction(prompt):
                         image_url = item.get('image_url', {}).get("url", '')
                         if image_url.startswith('data:image'):
                             image_list.append(image_url)
-                            item['image_url']['url'] = '[IMAGE DATA REMOVED FOR LOGGING]'
 
+    # This is what gets sent to the LLM (unchanged from original)
     current_time_str = time.strftime('%Y-%m-%d %H:%M:%S')
     headers_log = f"{current_time_str} - INFO - Request data: {json.dumps(request_json)}"
 
@@ -224,28 +334,51 @@ def handle_llm_interaction(prompt):
         r'Write the entirity of your response in 1 big markdown codeblock, no word should be out of this 1 big code block and do not write a md codeblock within this big codeblock',
     ]
 
-    if ntfy_notification_level == 'all':
+    # Enable summary if terminal_alert_level is 'all' OR ntfy is 'all'
+    if terminal_alert_level == 'all' or ntfy_notification_level == 'all':
         summary_instruction = r"You MUST include a `<summary>` tag inside your `<thinking>` block for every tool call. This summary should be a very brief, user-friendly explanation of the action you are about to take. For example: `<summary>Reading the project's configuration to check dependencies.</summary>` or `<summary>Completing the user's request by providing the full Python script.</summary>`."
         prompt_instructions.append(summary_instruction)
 
     prompt_instructions.append(prompt)
     full_prompt = "\n".join(prompt_instructions)
 
-
+    debug_mode = (terminal_log_level == 'debug')
     return talkto(current_model, full_prompt, image_list, debug=debug_mode)
 
 # --- FLASK ROUTES ---
-
 @app.route('/', methods=['GET'])
 def home():
-    logger.info(f"GET request to / from {request.remote_addr}")
+    logger.debug(f"GET request to / from {request.remote_addr}")
+    
+    # Generate remote info display only if remote is enabled
+    remote_info_section = ""
+    if remote_enabled:
+        public_url = ngrok_tunnel.public_url if 'ngrok_tunnel' in globals() else 'Starting...'
+        remote_info_section = f"""
+            <div class="control-section">
+                <h3>🌐 Remote Access Info</h3>
+                <div style="background: var(--button-group-bg); padding: 12px; border-radius: 8px; margin-bottom: 8px;">
+                    <div style="font-size: 0.9em; color: var(--text-light); margin-bottom: 4px;">Public URL:</div>
+                    <div style="font-family: monospace; font-size: 0.85em; word-break: break-all; color: var(--primary-color);">
+                        {public_url}
+                    </div>
+                </div>
+                <div style="background: var(--button-group-bg); padding: 12px; border-radius: 8px;">
+                    <div style="font-size: 0.9em; color: var(--text-light); margin-bottom: 4px;">API Key:</div>
+                    <div style="font-family: monospace; font-size: 0.85em; word-break: break-all; color: var(--primary-color);">
+                        {API_KEY}
+                    </div>
+                </div>
+            </div>
+        """
+    
     return f"""
     <!DOCTYPE html>
     <html lang="en">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>AI Model Bridge</title>
+        <title>Cline-X Control Panel</title>
         <style>
             :root {{
                 --background-start: #F4F7FC;
@@ -290,7 +423,7 @@ def home():
                 background: var(--card-background);
                 border-radius: 24px;
                 padding: 40px;
-                max-width: 500px;
+                max-width: 600px;
                 width: 100%;
                 box-shadow: 0 25px 50px -12px var(--shadow-color);
                 border: 1px solid var(--border-color);
@@ -347,6 +480,7 @@ def home():
                 justify-content: center;
                 gap: 8px;
                 white-space: nowrap;
+                min-width: fit-content;
             }}
             .model-btn:hover {{
                 color: var(--primary-color);
@@ -430,41 +564,58 @@ def home():
             .theme-toggle .moon-icon {{ display: block; }}
             body[data-theme="dark"] .theme-toggle .sun-icon {{ display: block; }}
             body[data-theme="dark"] .theme-toggle .moon-icon {{ display: none; }}
+            .ntfy-setup {{
+                margin-top: 12px;
+                padding: 12px;
+                background: var(--button-group-bg);
+                border-radius: 8px;
+                font-size: 0.9em;
+            }}
+            .ntfy-topic {{
+                font-family: monospace;
+                color: var(--primary-color);
+                word-break: break-all;
+                margin-top: 8px;
+            }}
+            .enable-btn {{
+                margin-top: 8px;
+                padding: 8px 16px;
+                background: var(--primary-color);
+                color: white;
+                border: none;
+                border-radius: 6px;
+                cursor: pointer;
+                font-weight: 600;
+                transition: all 0.2s;
+            }}
+            .enable-btn:hover {{
+                background: var(--primary-hover);
+            }}
         </style>
     </head>
     <body data-theme="{current_theme}">
         <div class="container">
             <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
-                <svg
-                class="sun-icon" 
-  xmlns="http://www.w3.org/2000/svg"
-  width="24"
-  height="24"
-  viewBox="0 0 24 24"
-  fill="none"
-  stroke="currentColor"
-  stroke-width="2"
-  stroke-linecap="round"
-  stroke-linejoin="round"
->
-  <circle cx="12" cy="12" r="5" />
-  <line x1="12" y1="1" x2="12" y2="3" />
-  <line x1="12" y1="21" x2="12" y2="23" />
-  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-  <line x1="1" y1="12" x2="3" y2="12" />
-  <line x1="21" y1="12" x2="23" y2="12" />
-  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-</svg>
-
-<svg class="moon-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M9.528 1.718a.75.75 0 01.162.819A8.97 8.97 0 009 6a9 9 0 009 9 8.97 8.97 0 003.463-.69a.75.75 0 01.981.98 10.503 10.503 0 01-9.694 6.46c-5.799 0-10.5-4.701-10.5-10.5 0-3.51 1.713-6.635 4.342-8.532a.75.75 0 01.818.162z" clip-rule="evenodd"></path></svg>
+                <svg class="sun-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="5" />
+                    <line x1="12" y1="1" x2="12" y2="3" />
+                    <line x1="12" y1="21" x2="12" y2="23" />
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                    <line x1="1" y1="12" x2="3" y2="12" />
+                    <line x1="21" y1="12" x2="23" y2="12" />
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                </svg>
+                <svg class="moon-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                    <path fill-rule="evenodd" d="M9.528 1.718a.75.75 0 01.162.819A8.97 8.97 0 009 6a9 9 0 009 9 8.97 8.97 0 003.463-.69a.75.75 0 01.981.98 10.503 10.503 0 01-9.694 6.46c-5.799 0-10.5-4.701-10.5-10.5 0-3.51 1.713-6.635 4.342-8.532a.75.75 0 01.818.162z" clip-rule="evenodd"></path>
+                </svg>
             </button>
-            <h1>🤖 AI Bridge</h1>
-            <p class="subtitle">Switch models and settings instantly.</p>
+            <h1>🤖 Cline-X</h1>
+            <p class="subtitle">Control Panel</p>
             
             <div class="control-section">
-                <h3>Active Model</h3>
+                <h3>AI Model</h3>
                 <div class="button-group" id="model-group">
                     <button class="model-btn {'active' if current_model == 'gemini' else ''}" onclick="switchModel(this, 'gemini')">🧠 Gemini</button>
                     <button class="model-btn {'active' if current_model == 'deepseek' else ''}" onclick="switchModel(this, 'deepseek')">🔍 DeepSeek</button>
@@ -473,23 +624,56 @@ def home():
             </div>
 
             <div class="control-section">
-                 <div class="settings-row">
-                    <h3>Debug Mode</h3>
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="debugToggle" {'checked' if debug_mode else ''} onchange="setDebug(this.checked)">
-                        <span class="slider"></span>
-                    </label>
-                 </div>
+                <h3>📋 Terminal Output Level</h3>
+                <div class="button-group" id="log-level-group">
+                    <button class="model-btn {'active' if terminal_log_level == 'none' else ''}" onclick="setLogLevel(this, 'none')">None</button>
+                    <button class="model-btn {'active' if terminal_log_level == 'minimal' else ''}" onclick="setLogLevel(this, 'minimal')">Minimal</button>
+                    <button class="model-btn {'active' if terminal_log_level == 'default' else ''}" onclick="setLogLevel(this, 'default')">Default</button>
+                    <button class="model-btn {'active' if terminal_log_level == 'debug' else ''}" onclick="setLogLevel(this, 'debug')">Debug</button>
+                </div>
             </div>
 
             <div class="control-section">
-                <h3>Notification Level</h3>
-                <div class="button-group" id="notification-group">
-                    <button class="model-btn {'active' if ntfy_notification_level == 'none' else ''}" onclick="setNotificationLevel(this, 'none')">None</button>
-                    <button class="model-btn {'active' if ntfy_notification_level == 'completion' else ''}" onclick="setNotificationLevel(this, 'completion')">Completions</button>
-                    <button class="model-btn {'active' if ntfy_notification_level == 'all' else ''}" onclick="setNotificationLevel(this, 'all')">All Responses</button>
+                <h3>🎯 Terminal Alerts</h3>
+                <div class="button-group" id="alert-level-group">
+                    <button class="model-btn {'active' if terminal_alert_level == 'none' else ''}" onclick="setAlertLevel(this, 'none')">None</button>
+                    <button class="model-btn {'active' if terminal_alert_level == 'completions' else ''}" onclick="setAlertLevel(this, 'completions')">Completions</button>
+                    <button class="model-btn {'active' if terminal_alert_level == 'all' else ''}" onclick="setAlertLevel(this, 'all')">All + Summaries</button>
                 </div>
             </div>
+
+            <div class="control-section">
+                <h3>📱 Push Notifications (ntfy.sh)</h3>
+                <div class="button-group" id="ntfy-level-group">
+                    <button class="model-btn {'active' if ntfy_notification_level == 'none' else ''}" onclick="setNtfyLevel(this, 'none')">Off</button>
+                    <button class="model-btn {'active' if ntfy_notification_level == 'completion' else ''}" onclick="setNtfyLevel(this, 'completion')">Completions</button>
+                    <button class="model-btn {'active' if ntfy_notification_level == 'all' else ''}" onclick="setNtfyLevel(this, 'all')">All</button>
+                </div>
+                <div id="ntfy-setup" class="ntfy-setup" style="display: {'block' if not config.get('ntfy_topic') else 'none'};">
+                    <div>📲 Enable push notifications to your phone!</div>
+                    <button class="enable-btn" onclick="enableNtfy()">Generate Topic Code</button>
+                </div>
+                <div id="ntfy-topic-display" style="display: {'block' if config.get('ntfy_topic') else 'none'};" class="ntfy-setup">
+                    <div style="margin-bottom: 8px;">Your ntfy topic:</div>
+                    <div class="ntfy-topic" id="ntfy-topic-value">{config.get('ntfy_topic', '')}</div>
+                    <div style="margin-top: 8px; font-size: 0.85em; color: var(--text-light);">Subscribe to this topic in the ntfy app</div>
+                </div>
+            </div>
+
+            <div class="control-section">
+                <div class="settings-row">
+                    <h3>🌐 Remote Access (ngrok)</h3>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="remoteToggle" {'checked' if remote_enabled else ''} onchange="setRemote(this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div style="margin-top: 8px; font-size: 0.85em; color: var(--text-light);">
+                    Enable to access Cline-X from anywhere via ngrok tunnel
+                </div>
+            </div>
+
+            {remote_info_section}
         </div>
 
         <script>
@@ -512,31 +696,11 @@ def home():
                     if (!data.success) {{
                         console.error('Error: ' + data.error);
                     }}
-                }})
-                .catch(error => console.error('Network error: ' + error.message));
-            }}
-
-            function setDebug(state) {{
-                fetch('/debug', {{
-                    method: 'POST',
-                    headers: {{'Content-Type': 'application/json'}},
-                    body: JSON.stringify({{'debug': state}})
-                }})
-                .then(response => response.json())
-                .then(data => {{
-                    if (!data.success) {{
-                        console.error('Failed to save debug state:', data.error);
-                        document.getElementById('debugToggle').checked = !state;
-                    }}
-                }})
-                .catch(error => {{
-                    console.error('Network error saving debug state:', error);
-                    document.getElementById('debugToggle').checked = !state;
                 }});
             }}
 
-            function setNotificationLevel(btn, level) {{
-                updateActiveButton(document.getElementById('notification-group'), btn);
+            function setNtfyLevel(btn, level) {{
+                updateActiveButton(document.getElementById('ntfy-level-group'), btn);
                 fetch('/notifications', {{
                     method: 'POST',
                     headers: {{'Content-Type': 'application/json'}},
@@ -547,8 +711,75 @@ def home():
                     if (!data.success) {{
                         console.error('Error: ' + data.error);
                     }}
+                }});
+            }}
+
+            function enableNtfy() {{
+                fetch('/notifications/enable', {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}}
                 }})
-                .catch(error => console.error('Network error: ' + error.message));
+                .then(response => response.json())
+                .then(data => {{
+                    if (data.success) {{
+                        document.getElementById('ntfy-setup').style.display = 'none';
+                        document.getElementById('ntfy-topic-display').style.display = 'block';
+                        document.getElementById('ntfy-topic-value').textContent = data.topic;
+                    }}
+                }});
+            }}
+
+            function setLogLevel(btn, level) {{
+                updateActiveButton(document.getElementById('log-level-group'), btn);
+                fetch('/log-level', {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify({{'level': level}})
+                }})
+                .then(response => response.json())
+                .then(data => {{
+                    if (!data.success) {{
+                        console.error('Error: ' + data.error);
+                        location.reload();
+                    }}
+                }});
+            }}
+
+            function setAlertLevel(btn, level) {{
+                updateActiveButton(document.getElementById('alert-level-group'), btn);
+                fetch('/alert-level', {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify({{'level': level}})
+                }})
+                .then(response => response.json())
+                .then(data => {{
+                    if (!data.success) {{
+                        console.error('Error: ' + data.error);
+                    }}
+                }});
+            }}
+
+            function setRemote(state) {{
+                fetch('/remote', {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify({{'enabled': state}})
+                }})
+                .then(response => response.json())
+                .then(data => {{
+                    if (data.success) {{
+                        // Reload the page to show/hide remote info section
+                        location.reload();
+                    }} else {{
+                        alert('Failed to toggle remote: ' + data.error);
+                        document.getElementById('remoteToggle').checked = !state;
+                    }}
+                }})
+                .catch(error => {{
+                    console.error('Network error:', error);
+                    document.getElementById('remoteToggle').checked = !state;
+                }});
             }}
             
             function setTheme(theme) {{
@@ -562,14 +793,7 @@ def home():
                 .then(data => {{
                     if (!data.success) {{
                         console.error('Failed to save theme:', data.error);
-                        const revertedTheme = theme === 'dark' ? 'light' : 'dark';
-                        document.body.dataset.theme = revertedTheme;
                     }}
-                }})
-                .catch(error => {{
-                    console.error('Network error saving theme:', error);
-                    const revertedTheme = theme === 'dark' ? 'light' : 'dark';
-                    document.body.dataset.theme = revertedTheme;
                 }});
             }}
 
@@ -583,226 +807,332 @@ def home():
     </html>
     """
 
-@app.route('/model', methods=['GET'])
-def get_model():
-    """Get current model"""
-    return jsonify({'model': current_model})
-
-@app.route('/model', methods=['POST'])
-def switch_model():
-    """Switch between models and save the choice to config.txt."""
-    global current_model
-    global config
+@app.route('/model', methods=['GET', 'POST'])
+def model_route():
+    global current_model, config
+    if request.method == 'GET':
+        return jsonify({'model': current_model})
     
-    try:
-        data = request.get_json()
-        if not data or 'model' not in data:
-            return jsonify({'success': False, 'error': 'Model not specified'}), 400
-        
-        new_model = data['model'].lower()
-        if new_model not in ['deepseek', 'gemini', 'aistudio']:
-            return jsonify({'success': False, 'error': 'Invalid model. Use "deepseek", "gemini", or "aistudio"'}), 400
-        
-        current_model = new_model
-        logger.info(f"Model switched to: {current_model}")
-        
+    if request.method == 'POST':
         try:
+            clear_previous_alert()
+            data = request.get_json()
+            new_model = data['model'].lower()
+            if new_model not in ['deepseek', 'gemini', 'aistudio']:
+                return jsonify({'success': False, 'error': 'Invalid model'}), 400
+            current_model = new_model
             config['model'] = current_model
             write_config(config)
-            logger.info(f"Saved model '{current_model}' to config.txt")
+            logger.info(f"Model switched to: {current_model}")
+            return jsonify({'success': True, 'model': current_model})
         except Exception as e:
-            logger.error(f"CRITICAL: Failed to save model to config.txt: {e}")
-        
-        return jsonify({'success': True, 'model': current_model})
-    
-    except Exception as e:
-        logger.error(f"Error switching model: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/debug', methods=['GET', 'POST'])
-def toggle_debug_mode():
-    """Get or set the debug mode status and save it to config.txt."""
-    global debug_mode
-    global config
-
-    if request.method == 'GET':
-        return jsonify({'debug_mode': debug_mode})
-    
-    if request.method == 'POST':
-        try:
-            data = request.get_json()
-            if data is None or 'debug' not in data or not isinstance(data['debug'], bool):
-                return jsonify({'success': False, 'error': 'Invalid request. Send {"debug": true} or {"debug": false}'}), 400
-
-            new_state = data['debug']
-            debug_mode = new_state
-            status = "ON" if debug_mode else "OFF"
-            logger.info(f"Debug mode set to: {status}")
-
-            try:
-                config['debug_mode'] = str(debug_mode)
-                write_config(config)
-                logger.info(f"Saved debug_mode='{debug_mode}' to config.txt")
-            except Exception as e:
-                logger.error(f"CRITICAL: Failed to save debug_mode to config.txt: {e}")
-
-            return jsonify({'success': True, 'debug_mode': debug_mode})
-
-        except Exception as e:
-            logger.error(f"Error setting debug mode: {str(e)}")
+            logger.error(f"Error switching model: {str(e)}")
             return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/notifications', methods=['GET', 'POST'])
+@app.route('/notifications', methods=['POST'])
 def notification_settings():
-    """Get or set the ntfy notification level and save it to config.txt."""
-    global ntfy_notification_level
-    global config
-
-    if request.method == 'GET':
-        return jsonify({'level': ntfy_notification_level})
-    
-    if request.method == 'POST':
-        try:
-            data = request.get_json()
-            if data is None or 'level' not in data:
-                return jsonify({'success': False, 'error': 'Invalid request. Send {"level": "level_name"}'}), 400
-            
-            new_level = data['level'].lower()
-            if new_level not in ['none', 'completion', 'all']:
-                return jsonify({'success': False, 'error': 'Invalid level. Use "none", "completion", or "all".'}), 400
-
-            ntfy_notification_level = new_level
-            logger.info(f"Notification level set to: {ntfy_notification_level}")
-
-            try:
-                config['ntfy_notification_level'] = ntfy_notification_level
-                write_config(config)
-                logger.info(f"Saved ntfy_notification_level='{ntfy_notification_level}' to config.txt")
-            except Exception as e:
-                logger.error(f"CRITICAL: Failed to save notification level to config.txt: {e}")
-
-            return jsonify({'success': True, 'level': ntfy_notification_level})
-
-        except Exception as e:
-            logger.error(f"Error setting notification level: {str(e)}")
-            return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/theme', methods=['GET', 'POST'])
-def theme_settings():
-    """Get or set the UI theme and save it to config.txt."""
-    global current_theme
-    global config
-
-    if request.method == 'GET':
-        return jsonify({'theme': current_theme})
-    
-    if request.method == 'POST':
-        try:
-            data = request.get_json()
-            if data is None or 'theme' not in data:
-                return jsonify({'success': False, 'error': 'Invalid request. Send {"theme": "theme_name"}'}), 400
-            
-            new_theme = data['theme'].lower()
-            if new_theme not in ['light', 'dark']:
-                return jsonify({'success': False, 'error': 'Invalid theme. Use "light" or "dark".'}), 400
-
-            current_theme = new_theme
-            logger.info(f"Theme set to: {current_theme}")
-
-            try:
-                config['theme'] = current_theme
-                write_config(config)
-                logger.info(f"Saved theme='{current_theme}' to config.txt")
-            except Exception as e:
-                logger.error(f"CRITICAL: Failed to save theme to config.txt: {e}")
-
-            return jsonify({'success': True, 'theme': current_theme})
-
-        except Exception as e:
-            logger.error(f"Error setting theme: {str(e)}")
-            return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/chat/completions', methods=['POST'])
-def chat_completions():
+    global ntfy_notification_level, config
     try:
         data = request.get_json()
-        logger.debug(f"Request data: {data}") # Use debug for verbose data
+        if data is None or 'level' not in data:
+            return jsonify({'success': False, 'error': 'Invalid request'}), 400
         
+        new_level = data['level'].lower()
+        if new_level not in ['none', 'completion', 'all']:
+            return jsonify({'success': False, 'error': 'Invalid level'}), 400
+
+        ntfy_notification_level = new_level
+        config['ntfy_notification_level'] = ntfy_notification_level
+        write_config(config)
+        logger.info(f"Notification level set to: {ntfy_notification_level}")
+        return jsonify({'success': True, 'level': ntfy_notification_level})
+    except Exception as e:
+        logger.error(f"Error setting notification level: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/notifications/enable', methods=['POST'])
+def enable_ntfy():
+    global config
+    try:
+        # Generate a random topic code
+        random_code = secrets.token_urlsafe(12)
+        topic = f"https://ntfy.sh/clinex-{random_code}"
+        
+        config['ntfy_topic'] = topic
+        write_config(config)
+        logger.info(f"Generated ntfy topic: {topic}")
+        return jsonify({'success': True, 'topic': topic})
+    except Exception as e:
+        logger.error(f"Error enabling ntfy: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/log-level', methods=['POST'])
+def set_log_level():
+    global terminal_log_level, config
+    try:
+        data = request.get_json()
+        if data is None or 'level' not in data:
+            return jsonify({'success': False, 'error': 'Invalid request'}), 400
+        
+        new_level = data['level'].lower()
+        if new_level not in ['none', 'minimal', 'default', 'debug']:
+            return jsonify({'success': False, 'error': 'Invalid level'}), 400
+
+        terminal_log_level = new_level
+        config['terminal_log_level'] = terminal_log_level
+        write_config(config)
+        
+        # Update logger level
+        if new_level == 'debug':
+            logger.setLevel(logging.DEBUG)
+        else:
+            logger.setLevel(logging.INFO)
+        
+        logger.info(f"Terminal log level set to: {terminal_log_level}")
+        return jsonify({'success': True, 'level': terminal_log_level})
+    except Exception as e:
+        logger.error(f"Error setting log level: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/alert-level', methods=['POST'])
+def set_alert_level():
+    global terminal_alert_level, config
+    try:
+        data = request.get_json()
+        if data is None or 'level' not in data:
+            return jsonify({'success': False, 'error': 'Invalid request'}), 400
+        
+        new_level = data['level'].lower()
+        if new_level not in ['none', 'completions', 'all']:
+            return jsonify({'success': False, 'error': 'Invalid level'}), 400
+
+        terminal_alert_level = new_level
+        config['terminal_alert_level'] = terminal_alert_level
+        write_config(config)
+        logger.info(f"Terminal alert level set to: {terminal_alert_level}")
+        return jsonify({'success': True, 'level': terminal_alert_level})
+    except Exception as e:
+        logger.error(f"Error setting alert level: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/remote', methods=['POST'])
+def toggle_remote():
+    global remote_enabled, config, ngrok_tunnel
+    try:
+        data = request.get_json()
+        if data is None or 'enabled' not in data:
+            return jsonify({'success': False, 'error': 'Invalid request'}), 400
+
+        new_state = data['enabled']
+        
+        if new_state and not remote_enabled:
+            # Enabling remote - start ngrok
+            ngrok_authtoken = os.getenv("NGROK_AUTHTOKEN")
+            if not ngrok_authtoken:
+                return jsonify({'success': False, 'error': 'NGROK_AUTHTOKEN not found in .env'}), 400
+            
+            try:
+                ngrok.set_auth_token(ngrok_authtoken)
+                ngrok_tunnel = ngrok.connect(3001)
+                remote_enabled = True
+                logger.info(f"ngrok tunnel established: {ngrok_tunnel.public_url}")
+            except Exception as e:
+                logger.error(f"Failed to start ngrok: {e}")
+                return jsonify({'success': False, 'error': f'Failed to start ngrok: {str(e)}'}), 500
+                
+        elif not new_state and remote_enabled:
+            # Disabling remote - stop ngrok
+            try:
+                if 'ngrok_tunnel' in globals():
+                    ngrok.disconnect(ngrok_tunnel.public_url)
+                remote_enabled = False
+                logger.info("ngrok tunnel disconnected")
+            except Exception as e:
+                logger.error(f"Failed to stop ngrok: {e}")
+                # Continue anyway since we're disabling
+                remote_enabled = False
+        
+        config['remote_enabled'] = str(remote_enabled)
+        write_config(config)
+        
+        response_data = {'success': True, 'enabled': remote_enabled}
+        if remote_enabled and 'ngrok_tunnel' in globals():
+            response_data['public_url'] = ngrok_tunnel.public_url
+            response_data['api_key'] = API_KEY
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        logger.error(f"Error toggling remote: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/theme', methods=['POST'])
+def theme_settings():
+    global current_theme, config
+    try:
+        data = request.get_json()
+        if data is None or 'theme' not in data:
+            return jsonify({'success': False, 'error': 'Invalid request'}), 400
+        
+        new_theme = data['theme'].lower()
+        if new_theme not in ['light', 'dark']:
+            return jsonify({'success': False, 'error': 'Invalid theme'}), 400
+
+        current_theme = new_theme
+        config['theme'] = current_theme
+        write_config(config)
+        logger.info(f"Theme set to: {current_theme}")
+        return jsonify({'success': True, 'theme': current_theme})
+    except Exception as e:
+        logger.error(f"Error setting theme: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/chat/completions', methods=['POST'])
+@require_api_key
+def chat_completions():
+    try:
+        clear_previous_alert()
+        
+        data = request.get_json()
         if not data or 'messages' not in data:
             return jsonify({'error': {'message': 'Invalid request format'}}), 400
 
-        last_message = data['messages'][-1]
-        prompt = get_content_text(last_message.get('content', ''))
+        prompt = get_content_text(data['messages'][-1].get('content', ''))
         
-        request_id = str(int(time.time()))
         is_streaming = data.get('stream', False)
-        
         response = handle_llm_interaction(prompt)
-        
-        # Check notification settings and send notifications accordingly
-        ntfy_topic = config.get('ntfy_topic', '')
-        
-        if ntfy_notification_level == 'all':
-            summary_match = re.search(r"<summary>(.*?)</summary>", response, re.DOTALL)
-            summary = summary_match.group(1).strip() if summary_match else None
+        request_id = f'chatcmpl-{int(time.time())}'
 
-            if "<attempt_completion>" in response:
+        # Check for attempt_completion
+        has_completion = "<attempt_completion>" in response
+        
+        # Extract summary if present
+        summary_match = re.search(r"<summary>(.*?)</summary>", response, re.DOTALL)
+        summary = summary_match.group(1).strip() if summary_match else None
+
+        # Terminal alerts
+        if has_completion and terminal_alert_level in ['completions', 'all']:
+            print_completion_alert()
+        elif summary and terminal_alert_level == 'all':
+            print_summary_alert(summary)
+
+        # ntfy notifications
+        ntfy_topic = config.get('ntfy_topic', '')
+        if ntfy_notification_level == 'all':
+            if has_completion:
                 send_ntfy_notification(
                     topic=ntfy_topic,
-                    simple_title="Cline-x: Task Completion",
+                    simple_title="🎉 Cline-X: Task Completion",
                     full_content=summary or "Task completion submitted.",
                     tags="tada"
                 )
             elif summary:
                 send_ntfy_notification(
                     topic=ntfy_topic,
-                    simple_title="🤖 Cline-x: AI Response",
+                    simple_title="🤖 Cline-X: AI Response",
                     full_content=summary,
                     tags="robot_face"
                 )
-        elif ntfy_notification_level == 'completion' and "<attempt_completion>" in response:
+        elif ntfy_notification_level == 'completion' and has_completion:
             send_ntfy_notification(
                 topic=ntfy_topic,
-                simple_title="Cline-x: Task Completion 🎉",
+                simple_title="🎉 Cline-X: Task Completion",
                 full_content=response,
                 tags="tada"
             )
         
         if is_streaming:
             def generate():
-                response_id = f"chatcmpl-{request_id}"
-                
-                # Send role first
-                chunk = {"id": response_id, "object": "chat.completion.chunk", "created": int(time.time()), "model": "gpt-3.5-turbo", "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}]}
+                chunk = {"id": request_id, "object": "chat.completion.chunk", "created": int(time.time()), "model": "gpt-3.5-turbo", "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}]}
                 yield f"data: {json.dumps(chunk)}\n\n"
                 
-                # Stream line by line
-                lines = response.splitlines(True) # Keep newlines
+                lines = response.splitlines(True)
                 for line in lines:
-                    chunk = {"id": response_id, "object": "chat.completion.chunk", "created": int(time.time()), "model": "gpt-3.5-turbo", "choices": [{"index": 0, "delta": {"content": line}, "finish_reason": None}]}
-                    yield f"data: {json.dumps(chunk)}\n\n"
+                    content_chunk = {"id": request_id, "object": "chat.completion.chunk", "created": int(time.time()), "model": "gpt-3.5-turbo", "choices": [{"index": 0, "delta": {"content": line}, "finish_reason": None}]}
+                    yield f"data: {json.dumps(content_chunk)}\n\n"
                 
-                # End stream
-                chunk = {"id": response_id, "object": "chat.completion.chunk", "created": int(time.time()), "model": "gpt-3.5-turbo", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
-                yield f"data: {json.dumps(chunk)}\n\n"
+                stop_chunk = {"id": request_id, "object": "chat.completion.chunk", "created": int(time.time()), "model": "gpt-3.5-turbo", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
+                yield f"data: {json.dumps(stop_chunk)}\n\n"
                 yield "data: [DONE]\n\n"
             
             return Response(generate(), mimetype='text/event-stream')
-        
+
         return jsonify({
-            'id': f'chatcmpl-{request_id}',
-            'object': 'chat.completion',
-            'created': int(time.time()),
-            'model': 'gpt-3.5-turbo',
-            'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': response}, 'finish_reason': 'stop'}],
+            'id': request_id, 'object': 'chat.completion', 'created': int(time.time()),
+            'model': 'gpt-3.5-turbo', 'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': response}, 'finish_reason': 'stop'}],
             'usage': {'prompt_tokens': len(prompt), 'completion_tokens': len(response), 'total_tokens': len(prompt) + len(response)}
         })
-    
+        
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}", exc_info=True)
         return jsonify({'error': {'message': str(e)}}), 500
 
+def print_startup_banner():
+    """Print a nice startup banner with all the important information"""
+    colorama.init(autoreset=True)
+    
+    banner = f"""
+{bannertop}
+
+{colorama.Fore.YELLOW + colorama.Style.BRIGHT}📋 SERVER INFORMATION:{colorama.Style.RESET_ALL}
+   {colorama.Fore.WHITE}Local:  {colorama.Fore.CYAN + colorama.Style.BRIGHT}http://127.0.0.1:3001{colorama.Style.RESET_ALL}"""
+    
+    if remote_enabled:
+        banner += f"""
+   {colorama.Fore.WHITE}Remote: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{ngrok_tunnel.public_url if 'ngrok_tunnel' in globals() else 'Starting...'}{colorama.Style.RESET_ALL}
+   {colorama.Fore.WHITE}API Key: {colorama.Fore.MAGENTA + colorama.Style.BRIGHT}{API_KEY}{colorama.Style.RESET_ALL}"""
+    
+    banner += f"""
+
+{colorama.Fore.YELLOW + colorama.Style.BRIGHT}⚙️  CURRENT SETTINGS:{colorama.Style.RESET_ALL}
+   {colorama.Fore.WHITE}Model: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{current_model.upper()}{colorama.Style.RESET_ALL}
+   {colorama.Fore.WHITE}Theme: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{current_theme.capitalize()}{colorama.Style.RESET_ALL}
+   {colorama.Fore.WHITE}Terminal Output: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{terminal_log_level.capitalize()}{colorama.Style.RESET_ALL}
+   {colorama.Fore.WHITE}Terminal Alerts: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{terminal_alert_level.capitalize()}{colorama.Style.RESET_ALL}
+   {colorama.Fore.WHITE}Push Notifications: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{ntfy_notification_level.capitalize()}{colorama.Style.RESET_ALL}
+   {colorama.Fore.WHITE}Remote Access: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{'Enabled' if remote_enabled else 'Disabled'}{colorama.Style.RESET_ALL}
+
+{colorama.Fore.YELLOW + colorama.Style.BRIGHT}🎛️  CONTROL PANEL:{colorama.Style.RESET_ALL}
+   {colorama.Fore.WHITE}Open your browser and go to:{colorama.Style.RESET_ALL}
+   {colorama.Fore.CYAN + colorama.Style.BRIGHT + colorama.Back.BLACK}  http://127.0.0.1:3001  {colorama.Style.RESET_ALL}
+   
+   {colorama.Fore.WHITE}Configure notifications, alerts, models, and more!{colorama.Style.RESET_ALL}
+
+{colorama.Fore.CYAN + colorama.Style.BRIGHT}{'═' * 62}{colorama.Style.RESET_ALL}
+"""
+    print(banner)
+
 if __name__ == '__main__':
-    logger.info(f"Starting AI Model Bridge server on port 3001 with default model: {current_model.upper()}")
-    app.run(host="0.0.0.0", port=3001)
+    colorama.init(autoreset=True)
+
+    # Handle ngrok setup if remote is enabled
+    if remote_enabled:
+        ngrok_authtoken = os.getenv("NGROK_AUTHTOKEN")
+        if not ngrok_authtoken:
+            print(f"{colorama.Fore.RED}NGROK_AUTHTOKEN not found in .env file.{colorama.Style.RESET_ALL}")
+            ngrok_authtoken = input("Please enter your ngrok authtoken: ").strip()
+            if ngrok_authtoken:
+                set_key(DOTENV_PATH, "NGROK_AUTHTOKEN", ngrok_authtoken)
+                print(f"{colorama.Fore.GREEN}NGROK_AUTHTOKEN saved to {DOTENV_PATH} for future use.{colorama.Style.RESET_ALL}")
+            else:
+                logger.error("No NGROK_AUTHTOKEN provided. Exiting.")
+                exit()
+        try:
+            ngrok.set_auth_token(ngrok_authtoken)
+            ngrok_tunnel = ngrok.connect(3001)
+            logger.info(f"ngrok tunnel established: {ngrok_tunnel.public_url}")
+        except Exception as e:
+            logger.error(f"Failed to start ngrok: {e}")
+            print(f"{colorama.Fore.RED}Failed to start ngrok. Remote access will not be available.{colorama.Style.RESET_ALL}")
+            remote_enabled = False
+
+    # Print the startup banner
+    print_startup_banner()
+    
+    # Start the Flask server
+    try:
+        app.run(host="0.0.0.0", port=3001)
+    except Exception as e:
+        logger.error(f"Failed to start server: {e}")
+        print(f"{colorama.Fore.RED}An error occurred: {e}{colorama.Style.RESET_ALL}")
+        input("Press Enter to exit.")

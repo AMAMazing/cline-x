@@ -1,0 +1,11 @@
+flask
+pillow
+requests
+pyngrok
+talktollm
+pywin32
+python-dotenv
+pyinstaller
+colorama
+optimisewait
+pywin32-ctypes

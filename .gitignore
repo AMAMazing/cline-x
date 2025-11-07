@@ -19,3 +19,6 @@ coverage/
 .cache/
 
 config.txt
+build.bat
+.venv
+cline-x.exe
