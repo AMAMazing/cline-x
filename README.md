@@ -1,145 +1,171 @@
-# Cline X (Local)
+# 🤖 Cline-X
 
-A Python-based API bridge that enables Cline (VS Code Extension) to interact with the LLMs web interface, providing OpenAI-compatible API endpoints for seamless integration.
+**A powerful Flask-based API server that bridges Cline (Claude Dev) with multiple AI models, featuring a beautiful web control panel and smart notification system.**
 
-## Overview
+## ✨ Features
 
-This project creates a Flask server that acts as a middleware between Cline and LLM webchat interface, translating API requests into web interactions. It simulates an OpenAI-compatible API endpoint, allowing Cline to use the web interface as if it were communicating with the OpenAI API.
+### 🎯 Multi-Model Support
+- **Gemini** - Google's powerful AI model
+- **DeepSeek** - Advanced reasoning capabilities
+- **AIStudio** - Creative AI interactions
 
-## Features
+Switch between models instantly through the web interface!
 
-- OpenAI-compatible API endpoints
-- Automated browser interaction with LLM logged in
-- Request rate limiting and management
-- Clipboard-based data transfer
-- Streaming response support
-- Comprehensive error handling and logging
-- Support for various content formats
+### 🎨 Beautiful Control Panel
+- **Modern UI** with light/dark theme support
+- **Real-time model switching** without restarts
+- **Configurable notifications** and alerts
+- **Remote access** via ngrok integration
 
-## Prerequisites
+### 📱 Smart Notifications
+- **Push notifications** via ntfy.sh
+- **Terminal alerts** with ASCII art for task completions
+- **Summary extraction** for quick updates
+- **Configurable levels**: None, Completions only, or All actions
 
-- Python 3.6+
-- Windows OS (due to win32clipboard dependency)
-- Chrome/Firefox browser installed
-- Active LLM account logged in
+### 🌐 Remote Access
+- **ngrok integration** for secure remote access
+- **API key authentication** for security
+- Access Cline-X from anywhere in the world
 
-Required Python packages:
+### ⚙️ Flexible Configuration
+- **Terminal output levels**: None, Minimal, Default, Debug
+- **Alert customization**: Choose when to get notified
+- **Persistent settings** saved across sessions
+- **Easy setup** with web-based configuration
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Python 3.8 or higher
+- Windows OS (for clipboard functionality)
+- ngrok account (optional, for remote access)
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/yourusername/cline-x.git
+   cd cline-x
+   ```
+
+2. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Set up environment variables**
+   Create a `.env` file in the project root:
+   ```env
+   NGROK_AUTHTOKEN=your_ngrok_token_here  # Optional
+   ```
+
+4. **Configure your AI model credentials**
+   Add your API keys to the `.env` file or configure through the web interface
+
+5. **Run the server**
+   ```bash
+   python app.py
+   ```
+
+6. **Open the control panel**
+   Navigate to `http://127.0.0.1:3001` in your browser
+
+### 📦 Using the Pre-built Executable
+
+If you prefer not to set up Python, download the pre-built executable from the [Releases](../../releases) section. Simply extract and run `cline-x.exe`!
+
+## 📖 Usage
+
+### Connecting to Cline
+
+1. Start Cline-X server
+2. In your Cline extension settings, point the API endpoint to:
+   - Local: `http://127.0.0.1:3001/`
+   - Remote: Use the ngrok URL shown in the control panel
+
+### Control Panel Features
+
+**🤖 AI Model Selection**
+- Switch between Gemini, DeepSeek, and AIStudio with one click
+
+**📋 Terminal Output Levels**
+- **None**: Silent operation
+- **Minimal**: Essential messages only
+- **Default**: Standard logging
+- **Debug**: Verbose output for troubleshooting
+
+**🎯 Terminal Alerts**
+- **None**: No visual alerts
+- **Completions**: Alert when tasks complete
+- **All + Summaries**: Real-time updates with AI-generated summaries
+
+**📱 Push Notifications (ntfy.sh)**
+- Get instant notifications on your phone
+- One-click topic generation
+- Configurable notification levels
+
+**🌐 Remote Access**
+- Enable/disable ngrok tunnel
+- View public URL and API key
+- Secure authentication
+
+## 🔧 Configuration
+
+Settings are stored in `config.txt` and persist across restarts:
+
 ```
-flask
-pywin32
-pyautogui
-optimisewait
+model = "gemini"
+theme = "dark"
+ntfy_topic = ""
+ntfy_notification_level = "none"
+terminal_log_level = "default"
+terminal_alert_level = "none"
+remote_enabled = "False"
 ```
 
-## Installation
+## 🎨 Terminal Alerts
 
-1. Clone the repository:
-```bash
-git clone https://github.com/AMAMazing/cline-x.git
-```
+When enabled, Cline-X displays beautiful ASCII art notifications in your terminal:
 
-2. Install dependencies:
-```bash
-pip install flask pywin32 pyautogui
-```
+- **Completion alerts** with eye-catching borders
+- **Summary displays** for AI actions
+- **Auto-clearing** previous alerts for clean output
 
-3. Set up the image directory structure (required for GUI automation):
-```
-images/
-├── approve.png
-├── copy.png
-├── error.png
-├── instructions.png
-├── likedislike.png
-├── proceed.png
-├── proceed2.png
-├── resume.png
-├── run.png
-├── runcommand.png
-├── save.png
-├── startnewtask.png
-├── typesmthn.png
-└── alt1440/
-    ├── claudenew.png
-    ├── copy.png
-    └── submit.png
-```
+## 🔐 Security
 
-## Configuration
+- API key authentication for remote access
+- Secure ngrok tunneling
+- Rate limiting on requests (5-second minimum interval)
+- Environment-based credential storage
 
-1. Update the image paths in `claude.py`:
-```python
-set_autopath(r"path/to/your/images")
-set_altpath(r"path/to/your/images/alt1440")
-```
+## 🛠️ Development
 
-2. Adjust the `MIN_REQUEST_INTERVAL` (default: 5 seconds) if needed to match your rate limiting requirements.
+### Key Dependencies
+- Flask - Web framework
+- pyngrok - ngrok integration
+- pyautogui - GUI automation
+- win32clipboard - Clipboard access
+- colorama - Terminal colors
+- requests - HTTP client
+- python-dotenv - Environment management
 
-## Usage
+## 📝 License
 
-1. Start the server:
-```bash
-python main.py
-```
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-2. Configure Cline to use the local API endpoint:
-   - Open Cline settings in VS Code
-   - Select "OpenAI Compatible" as the API provider
-   - Set Base URL to: `http://localhost:3001`
-   - Set API Key to any non-empty value (e.g., "any-value")
-   - Set Model ID to "gpt-3.5-turbo"
+## 🤝 Contributing
 
-3. Visit http://localhost:3001 in your browser to switch between Gemini and DeepSeek models
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-The server will now:
-1. Receive API requests from Cline
-2. Open Claude.ai in a new browser tab
-3. Input the prompt and retrieve the response
-4. Return formatted response to Cline
+## 💬 Support
 
-## Technical Details
+Having issues? Open an issue on GitHub or check the [documentation](../../wiki).
 
-### API Endpoint
+## 🌟 Show Your Support
 
-- POST `/chat/completions`: Main endpoint for chat completions
-- GET `/`: Health check endpoint
-- POST `/model`: Endpoint to switch between models (Gemini/DeepSeek)
+If you find Cline-X useful, please consider giving it a star on GitHub!
 
-### Key Components
+---
 
-- **Flask Server**: Handles HTTP requests and provides API endpoints
-- **Browser Automation**: Uses PyAutoGUI and optimisewait for GUI interaction
-- **Clipboard Management**: Handles data transfer between the server and Claude.ai
-- **Response Processing**: Cleans and formats Claude's responses to match OpenAI API structure
-
-### Rate Limiting
-
-The server implements a simple rate limiting mechanism:
-- Minimum 5-second interval between requests
-- Automatic request queueing if interval not met
-
-### Error Handling
-
-- Comprehensive logging system
-- Graceful error handling for API requests
-- Unicode text handling for clipboard operations
-
-## Limitations
-
-- Windows-only support (due to win32clipboard)
-- Requires active browser window
-- Depends on GUI automation (sensitive to UI changes)
-- Requires logged-in web session
-- Rate-limited by design
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
-
-## License
-
-[MIT](LICENSE)
-
-## Disclaimer
-
-This project is not officially affiliated with Anthropic, OpenAI, or Cline. Use at your own discretion and in accordance with respective terms of service.
+**Built with ❤️ for the Cline community**

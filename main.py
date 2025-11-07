@@ -1022,7 +1022,7 @@ def chat_completions():
             if has_completion:
                 send_ntfy_notification(
                     topic=ntfy_topic,
-                    simple_title="🎉 Cline-X: Task Completion",
+                    simple_title="Cline-X: Task Completion",
                     full_content=summary or "Task completion submitted.",
                     tags="tada"
                 )
@@ -1036,7 +1036,7 @@ def chat_completions():
         elif ntfy_notification_level == 'completion' and has_completion:
             send_ntfy_notification(
                 topic=ntfy_topic,
-                simple_title="🎉 Cline-X: Task Completion",
+                simple_title="Cline-X: Task Completion",
                 full_content=response,
                 tags="tada"
             )
