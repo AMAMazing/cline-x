@@ -331,28 +331,27 @@ def handle_llm_interaction(prompt):
     # --- UNIFIED PROMPT RULES ---
     unified_rules = r"""
 CRITICAL OUTPUT PROTOCOL: HEADLESS CLI MODE
-You are a Headless CLI Bridge. Your output is piped directly into a compiler that will crash if it detects ANY text outside of a single markdown codeblock.
+You are a Headless CLI Bridge. Your output is piped directly into a compiler. You must adhere to the following strict protocol.
 
 1. THE CONTAINER RULE
    - Your ENTIRE response must be wrapped in a SINGLE markdown code block (```).
-   - You are strictly FORBIDDEN from writing any text (conversational or otherwise) outside this block.
    - Start your response immediately with ``` and end with ```.
+   - NO text outside this block.
 
-2. THE SYNTAX ESCAPE RULE (^^^)
-   - Because your response is inside a codeblock, you cannot use standard backticks (```) for inner code.
-   - YOU MUST SUBSTITUTE ALL INNER BACKTICKS WITH ^^^.
-   - Example: Instead of ```python, write ^^^python.
-
-3. ATOMICITY RULE (ONE ACTION PER TURN)
+2. ATOMICITY RULE (ONE ACTION ONLY)
    - You are strictly limited to ONE major tool use per response.
-   - DO NOT chain multiple major commands (e.g., do NOT read_file AND write_to_file in the same response).
-   - DO NOT repeat the same tool call twice.
-   - EXCEPTION: If you use `write_to_file` with `^^^`, you MUST chain the specific `execute_command` PowerShell fix immediately after it in the same block. This is the ONLY allowed chain.
+   - NEVER chain commands. Do not use `write_to_file` and `execute_command` in the same response.
+   - Do one thing, wait for the user result, then do the next.
+
+3. FILE CONTENT RULE (NO MARKDOWN IN FILES)
+   - When using `write_to_file`, the text inside the `<content>` tags must be the RAW file content.
+   - STRICTLY FORBIDDEN: Do NOT wrap the file content in markdown code fences (``` or ^^^).
+   - STRICTLY FORBIDDEN: Do NOT include language identifiers (like 'python', 'typescript', 'ts') inside the content tags.
+   - JUST WRITE THE CODE.
 
 4. FILE OPERATION PROTOCOL
    - ONLY use the `write_to_file` tool. The `replace_in_file` tool is DISABLED.
    - You must always provide the FULL content of the file.
-   - POST-PROCESS FIX: If you write a file containing the `^^^` escape sequence, you must immediately chain the `execute_command` to restore the backticks using PowerShell.
 
 5. THINKING REQUIREMENT
    - You must include a <thinking> tag inside your codeblock explaining your plan.
@@ -363,21 +362,15 @@ Assistant:
 ```
 <thinking>
 1. I will create hello.py using write_to_file.
-2. I will use ^^^ delimiters for the python code inside.
-3. I will immediately run the PowerShell command to fix the delimiters.
+2. I will provide the raw code without markdown wrappers.
 </thinking>
 <write_to_file>
 <path>hello.py</path>
 <content>
-^^^python
 print("Hello World")
-^^^
+print("This is raw code")
 </content>
 </write_to_file>
-<execute_command>
-<command>powershell -Command "((Get-Content -Path 'hello.py' -Raw).Replace(([string][char]94 * 3), ([string][char]96 * 3))) | Set-Content -Path 'hello.py'"</command>
-<requires_approval>false</requires_approval>
-</execute_command>
 ```
 """
 
@@ -386,7 +379,7 @@ print("Hello World")
 
     # Enable summary if terminal_alert_level is 'all' OR ntfy is 'all'
     if terminal_alert_level == 'all' or ntfy_notification_level == 'all':
-        summary_instruction = r"You MUST include a `<summary>` tag inside your `<thinking>` block for every tool call. This summary should be a very brief, user-friendly explanation of the action you are about to take. For example: `<summary>Reading the project's configuration to check dependencies.</summary>` or `<summary>Completing the user's request by providing the full Python script.</summary>`."
+        summary_instruction = r"You MUST include a `<summary>` tag inside your `<thinking>` block for every tool call. This summary should be a very brief, user-friendly explanation of the action you are about to take. For example: `<summary>Reading the project's configuration to check dependencies.</summary>`."
         prompt_instructions.append(summary_instruction)
 
     # Add the unified rules LAST (before the prompt) so they have highest priority
