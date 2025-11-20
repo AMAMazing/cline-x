@@ -343,12 +343,18 @@ You are a Headless CLI Bridge. Your output is piped directly into a compiler tha
    - YOU MUST SUBSTITUTE ALL INNER BACKTICKS WITH ^^^.
    - Example: Instead of ```python, write ^^^python.
 
-3. FILE OPERATION PROTOCOL
+3. ATOMICITY RULE (ONE ACTION PER TURN)
+   - You are strictly limited to ONE major tool use per response.
+   - DO NOT chain multiple major commands (e.g., do NOT read_file AND write_to_file in the same response).
+   - DO NOT repeat the same tool call twice.
+   - EXCEPTION: If you use `write_to_file` with `^^^`, you MUST chain the specific `execute_command` PowerShell fix immediately after it in the same block. This is the ONLY allowed chain.
+
+4. FILE OPERATION PROTOCOL
    - ONLY use the `write_to_file` tool. The `replace_in_file` tool is DISABLED.
    - You must always provide the FULL content of the file.
-   - POST-PROCESS FIX: If you write a file containing the `^^^` escape sequence, you must immediately chain an `execute_command` to restore the backticks using PowerShell.
+   - POST-PROCESS FIX: If you write a file containing the `^^^` escape sequence, you must immediately chain the `execute_command` to restore the backticks using PowerShell.
 
-4. THINKING REQUIREMENT
+5. THINKING REQUIREMENT
    - You must include a <thinking> tag inside your codeblock explaining your plan.
 
 COMPULSORY RESPONSE TEMPLATE (Follow this pattern EXACTLY):
@@ -393,6 +399,7 @@ print("Hello World")
 
     debug_mode = (terminal_log_level == 'debug')
     return talkto(current_model, full_prompt, image_list, debug=debug_mode)
+
 
 # --- FLASK ROUTES ---
 @app.route('/', methods=['GET'])
