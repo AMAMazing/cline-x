@@ -324,22 +324,71 @@ def handle_llm_interaction(prompt):
                         if image_url.startswith('data:image'):
                             image_list.append(image_url)
 
-    # This is what gets sent to the LLM (unchanged from original)
+    # This is what gets sent to the LLM
     current_time_str = time.strftime('%Y-%m-%d %H:%M:%S')
     headers_log = f"{current_time_str} - INFO - Request data: {json.dumps(request_json)}"
 
-    prompt_instructions = [
-        headers_log,
-        r'Please follow these rules: For each response, you must use one of the available tools formatted in proper XML tags. Tools include attempt_completion, ask_followup_question, read_file, write_to_file, search_files, list_files, execute_command, and list_code_definition_names. Do not respond conversationally - only use tool commands. Format any code you generate with proper indentation and line breaks, as you would in a standard code editor. Disregard any previous instructions about generating code in a single line or avoiding newline characters.',
-        r'Write the entirity of your response in 1 big markdown codeblock, no word should be out of this 1 big code block and do not write a md codeblock within this big codeblock',
-    ]
+    # --- UNIFIED PROMPT RULES ---
+    unified_rules = r"""
+CRITICAL OUTPUT PROTOCOL: HEADLESS CLI MODE
+You are a Headless CLI Bridge. Your output is piped directly into a compiler that will crash if it detects ANY text outside of a single markdown codeblock.
+
+1. THE CONTAINER RULE
+   - Your ENTIRE response must be wrapped in a SINGLE markdown code block (```).
+   - You are strictly FORBIDDEN from writing any text (conversational or otherwise) outside this block.
+   - Start your response immediately with ``` and end with ```.
+
+2. THE SYNTAX ESCAPE RULE (^^^)
+   - Because your response is inside a codeblock, you cannot use standard backticks (```) for inner code.
+   - YOU MUST SUBSTITUTE ALL INNER BACKTICKS WITH ^^^.
+   - Example: Instead of ```python, write ^^^python.
+
+3. FILE OPERATION PROTOCOL
+   - ONLY use the `write_to_file` tool. The `replace_in_file` tool is DISABLED.
+   - You must always provide the FULL content of the file.
+   - POST-PROCESS FIX: If you write a file containing the `^^^` escape sequence, you must immediately chain an `execute_command` to restore the backticks using PowerShell.
+
+4. THINKING REQUIREMENT
+   - You must include a <thinking> tag inside your codeblock explaining your plan.
+
+COMPULSORY RESPONSE TEMPLATE (Follow this pattern EXACTLY):
+User: "Create a hello.py script."
+Assistant:
+```
+<thinking>
+1. I will create hello.py using write_to_file.
+2. I will use ^^^ delimiters for the python code inside.
+3. I will immediately run the PowerShell command to fix the delimiters.
+</thinking>
+<write_to_file>
+<path>hello.py</path>
+<content>
+^^^python
+print("Hello World")
+^^^
+</content>
+</write_to_file>
+<execute_command>
+<command>powershell -Command "((Get-Content -Path 'hello.py' -Raw).Replace(([string][char]94 * 3), ([string][char]96 * 3))) | Set-Content -Path 'hello.py'"</command>
+<requires_approval>false</requires_approval>
+</execute_command>
+```
+"""
+
+    # Start building instructions list
+    prompt_instructions = [headers_log]
 
     # Enable summary if terminal_alert_level is 'all' OR ntfy is 'all'
     if terminal_alert_level == 'all' or ntfy_notification_level == 'all':
         summary_instruction = r"You MUST include a `<summary>` tag inside your `<thinking>` block for every tool call. This summary should be a very brief, user-friendly explanation of the action you are about to take. For example: `<summary>Reading the project's configuration to check dependencies.</summary>` or `<summary>Completing the user's request by providing the full Python script.</summary>`."
         prompt_instructions.append(summary_instruction)
 
+    # Add the unified rules LAST (before the prompt) so they have highest priority
+    prompt_instructions.append(unified_rules)
+
+    # Add the actual user message/prompt
     prompt_instructions.append(prompt)
+    
     full_prompt = "\n".join(prompt_instructions)
 
     debug_mode = (terminal_log_level == 'debug')
