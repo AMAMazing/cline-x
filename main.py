@@ -361,6 +361,7 @@ User: "Create a hello.py script."
 Assistant:
 ```
 <thinking>
+<summary>Writing "Hello World" & "This is raw code" to hello.py</summary>
 1. I will create hello.py using write_to_file.
 2. I will provide the raw code without markdown wrappers.
 </thinking>
@@ -372,6 +373,41 @@ print("This is raw code")
 </content>
 </write_to_file>
 ```
+
+If you are wanting to use ``` inside the 1 big codeblock for maybe inner codeblocks for markdown for example like readme, then use ^^^ instead of ``` for the inner codeblocks and then wait till you know the write is complete then execute this command in terminal as the next step:
+powershell -Command "((Get-Content -Path {filepath} -Raw).Replace(([string][char]94 * 3), ([string][char]96 * 3))) | Set-Content -Path {filepath}"
+(ofcource changing {filepath} to the actual filepath)
+
+so this will look like this:
+step 1:```
+<thinking>
+<summary>Writing README.md file for hello world</summary>
+1. I will create hello.py using write_to_file.
+2. I will provide the raw code without markdown wrappers.
+</thinking>
+<write_to_file>
+<path>README.md</path>
+<content>
+# This is an example read me
+^^^
+print('hello world')
+^^^
+</content>
+</write_to_file>
+```
+
+step 2:
+```
+<thinking>
+<summary>Executing the PowerShell command to normalize backticks in README.md.</summary>
+Because the last command was a markdown file with inner codeblocks, I will run the powershell command to normalize it.
+</thinking>
+<execute_command>
+<command>powershell -Command "((Get-Content -Path README.md -Raw).Replace(([string][char]94 * 3), ([string][char]96 * 3))) | Set-Content -Path README.md"</command>
+<requires_approval>false</requires_approval>
+</execute_command>
+```
+
 
 ====
 
