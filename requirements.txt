@@ -9,3 +9,6 @@ pyinstaller
 colorama
 optimisewait
 pywin32-ctypes
+PyQt6
+Flask-WTF
+waitress

@@ -22,3 +22,5 @@ config.txt
 build.bat
 .venv
 cline-x.exe
+
+ignored_folders.json
