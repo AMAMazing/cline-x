@@ -1,10 +1,13 @@
-from flask import Flask, jsonify, request, Response, abort
+from flask import Flask, jsonify, request, Response, abort, render_template, redirect, url_for, session, send_file
+from flask_wtf.csrf import CSRFProtect, generate_csrf
 import webbrowser
 import win32clipboard
 import time
 import pywintypes
 from time import sleep
 import os
+import ctypes
+from urllib.parse import unquote
 from optimisewait import optimiseWait, set_autopath, set_altpath
 import pyautogui
 import logging
@@ -17,7 +20,7 @@ from PIL import Image
 import re
 from talktollm import talkto
 import requests
-import secrets
+import secrets  
 from functools import wraps
 from pyngrok import ngrok
 import sys
@@ -25,6 +28,16 @@ from dotenv import load_dotenv, set_key
 import colorama
 from ascii import art as attempt_completion_art
 from ascii import banner as bannertop
+import subprocess
+
+# --- Import Window Management (from app.py) ---
+try:
+    import pygetwindow as gw
+except ImportError:
+    print("CRITICAL ERROR: 'pygetwindow' is missing.")
+    print("Please run: pip install pygetwindow")
+    # We continue but features will fail
+    gw = None
 
 # --- PATH HANDLING for frozen executables ---
 def get_app_path():
@@ -36,6 +49,7 @@ def get_app_path():
 
 APP_PATH = get_app_path()
 DOTENV_PATH = os.path.join(APP_PATH, '.env')
+IGNORED_FILE = 'ignored_folders.json' # From app.py
 
 load_dotenv(dotenv_path=DOTENV_PATH)
 
@@ -75,6 +89,19 @@ def write_config(config_data):
         for key, value in config_data.items():
             f.write(f'{key} = "{value}"\n')
 
+def get_rules_content():
+    """Reads the unified rules from an external file."""
+    rules_path = os.path.join(APP_PATH, "unified_rules.txt")
+    try:
+        with open(rules_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        print(f"ERROR: '{rules_path}' not found. Please create this file with your system prompt.")
+        return "You are a helpful AI assistant." # Fallback if file is missing
+    except Exception as e:
+        print(f"ERROR reading rules file: {e}")
+        return "You are a helpful AI assistant."
+
 # Load initial configuration
 config = read_config()
 current_model = config.get('model', 'gemini')
@@ -87,6 +114,17 @@ remote_enabled = config.get('remote_enabled', 'False').lower() == 'true'
 # --- State for clearing the alert ---
 alert_lines_printed = 0
 alert_active = False
+
+# --- Chat History for Web Interface ---
+chat_history = []
+MAX_CHAT_HISTORY = 50
+
+def add_chat_message(role, text):
+    global chat_history
+    message = {'role': role, 'text': text, 'time': time.strftime('%H:%M')}
+    chat_history.append(message)
+    if len(chat_history) > MAX_CHAT_HISTORY:
+        chat_history.pop(0)
 
 # --- API Key (only used when remote is enabled) ---
 API_KEY = secrets.token_urlsafe(32)
@@ -134,15 +172,170 @@ logger.addHandler(handler)
 logger.setLevel(logging.DEBUG if terminal_log_level == 'debug' else logging.INFO)
 
 app = Flask(__name__)
+app.secret_key = os.urandom(24) # Ensure secret key for session
+csrf = CSRFProtect(app) # Enable CSRF protection
+
 last_request_time = 0
 MIN_REQUEST_INTERVAL = 5
 
 set_autopath(r"D:\cline-x-claudeweb\images")
 set_altpath(r"D:\cline-x-claudeweb\images\alt1440")
 
+# --- HELPER FUNCTIONS FROM APP.PY ---
+
+def force_bring_to_front(hwnd):
+    """
+    Forces a window to the foreground by attaching thread inputs.
+    Bypasses Windows 'flashing taskbar' restriction.
+    """
+    try:
+        user32 = ctypes.windll.user32
+        
+        # 1. Get the thread ID of the current foreground window (likely Chrome)
+        foreground_hwnd = user32.GetForegroundWindow()
+        current_thread_id = user32.GetWindowThreadProcessId(foreground_hwnd, None)
+        
+        # 2. Get the thread ID of the target window (VS Code)
+        target_thread_id = user32.GetWindowThreadProcessId(hwnd, None)
+        
+        # 3. Attach threads: Tricks Windows into thinking they share input
+        if current_thread_id != target_thread_id:
+            user32.AttachThreadInput(current_thread_id, target_thread_id, True)
+        
+        # 4. Restore if minimized (SW_RESTORE = 9) and bring to front
+        user32.ShowWindow(hwnd, 9) 
+        user32.SetForegroundWindow(hwnd)
+        
+        # 5. Detach threads
+        if current_thread_id != target_thread_id:
+            user32.AttachThreadInput(current_thread_id, target_thread_id, False)
+            
+    except Exception as e:
+        logger.error(f"Force focus failed: {e}")
+
+def load_ignored_folders():
+    if os.path.exists(IGNORED_FILE):
+        try:
+            with open(IGNORED_FILE, 'r') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            pass
+    return []
+
+def save_ignored_folder(path):
+    current_ignored = load_ignored_folders()
+    if path not in current_ignored:
+        current_ignored.append(path)
+        try:
+            with open(IGNORED_FILE, 'w') as f:
+                json.dump(current_ignored, f, indent=4)
+        except IOError as e:
+            logger.error(f"Failed to save ignored folder: {e}")
+
+def find_vscode_executable():
+    appdata_path = os.environ.get('LOCALAPPDATA', '')
+    program_files = os.environ.get('ProgramFiles', '')
+    program_files_x86 = os.environ.get('ProgramFiles(x86)', '')
+    possible_paths = [
+        os.path.join(appdata_path, 'Programs', 'Microsoft VS Code', 'Code.exe'),
+        os.path.join(appdata_path, 'Programs', 'Microsoft VS Code', 'bin', 'code.cmd'),
+        os.path.join(program_files, 'Microsoft VS Code', 'Code.exe'),
+        os.path.join(program_files, 'Microsoft VS Code', 'bin', 'code.cmd'),
+    ]
+    if program_files_x86:
+        possible_paths.extend([
+            os.path.join(program_files_x86, 'Microsoft VS Code', 'Code.exe'),
+            os.path.join(program_files_x86, 'Microsoft VS Code', 'bin', 'code.cmd'),
+        ])
+    for path in possible_paths:
+        if os.path.exists(path):
+            return path
+    
+    try:
+        result = subprocess.run(['where', 'code'], capture_output=True, text=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        first_path = result.stdout.strip().splitlines()[0]
+        if os.path.exists(first_path):
+            return first_path
+    except Exception:
+        pass
+    return None
+
+def get_vscode_projects():
+    try:
+        possible_paths = [
+            os.path.join(os.environ['APPDATA'], 'Code', 'User', 'globalStorage', 'storage.json'),
+            os.path.join(os.environ['APPDATA'], 'Code - Insiders', 'User', 'globalStorage', 'storage.json'),
+            os.path.join(os.environ['APPDATA'], 'VSCodium', 'User', 'globalStorage', 'storage.json')
+        ]
+        storage_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                storage_path = path
+                break
+        if not storage_path:
+            return []
+        with open(storage_path, 'r', encoding='utf-8') as f:
+            storage_data = json.load(f)
+        project_uris = list(storage_data.get('profileAssociations', {}).get('workspaces', {}).keys())
+        cleaned_paths = []
+        for uri in project_uris:
+            if uri.startswith('file:///'):
+                path = unquote(uri[8:]).replace('/', '\\\\')
+                cleaned_paths.append(path)
+        folder_paths = [p for p in cleaned_paths if os.path.isdir(p)]
+        return sorted(folder_paths, key=lambda p: os.path.getmtime(p) if os.path.exists(p) else 0, reverse=True)
+    except Exception as e:
+        logger.error(f"Error getting projects: {e}")
+        return []
+
+def find_project_icon(project_path):
+    try:
+        if not os.path.isdir(project_path):
+            return None
+        for item in os.listdir(project_path):
+            # Strict .ico only
+            if item.lower().endswith('.ico'):
+                return os.path.join(project_path, item)
+    except Exception as e:
+        logger.error(f"Error looking for icon in {project_path}: {e}")
+    return None
+
+def get_active_windows():
+    active_list = []
+    if not gw:
+        return active_list
+    vscode_identifier = " - Visual Studio Code"
+    try:
+        all_windows = gw.getAllWindows()
+        for window in all_windows:
+            if window.title and window.title.endswith(vscode_identifier) and window.visible:
+                base_name = window.title.removesuffix(vscode_identifier)
+                project_name = base_name.split(' - ')[-1].strip()
+                active_list.append({
+                    'full_title': window.title,
+                    'name': project_name
+                })
+    except Exception as e:
+        logger.error(f"Error listing windows: {e}")
+    return active_list
+
+def process_optimisewait_message(message):
+    """
+    Simple function to handle the message and run optimisewait.
+    """
+    # maximize line removed as requested
+    optimiseWait('newchat', autopath='linkimages')
+    optimiseWait('taskhere', autopath='linkimages')
+    pyautogui.typewrite(message)
+    pyautogui.press('enter')
+
 # --- NTFY NOTIFICATION ---
 def send_ntfy_notification(topic: str, simple_title: str, full_content: str, tags: str = "tada"):
-    """Sends a push notification via ntfy.sh"""
+    """Sends a push notification via ntfy.sh and adds to local chat history"""
+    
+    # Add to local chat history for Cline Link
+    add_chat_message('system', f"{simple_title}: {full_content}")
+
     if not topic:
         logger.debug("ntfy_topic not configured. Skipping notification.")
         return
@@ -262,6 +455,9 @@ def print_summary_alert(summary: str):
     """Prints a summary message in a highlighted format."""
     global alert_lines_printed, alert_active
     
+    # Also add to chat history
+    add_chat_message('system', f"AI Summary: {summary}")
+    
     # Don't clear previous alert for summaries, just print below
     
     border = colorama.Fore.CYAN + colorama.Style.BRIGHT + "=" * 60
@@ -329,133 +525,8 @@ def handle_llm_interaction(prompt):
     headers_log = f"{current_time_str} - INFO - Request data: {json.dumps(request_json)}"
 
     # --- UNIFIED PROMPT RULES ---
-    unified_rules = r"""
-CRITICAL OUTPUT PROTOCOL: HEADLESS CLI MODE
-You are a Headless CLI Bridge. Your output is piped directly into a compiler. You must adhere to the following strict protocol.
-
-1. THE CONTAINER RULE
-   - Your ENTIRE response must be wrapped in a SINGLE markdown code block (```).
-   - Start your response immediately with ``` and end with ```.
-   - NO text outside this block.
-
-2. ATOMICITY RULE (ONE ACTION ONLY)
-   - You are strictly limited to ONE major tool use per response.
-   - NEVER chain commands. Do not use `write_to_file` and `execute_command` in the same response.
-   - Do one thing, wait for the user result, then do the next.
-
-3. FILE CONTENT RULE (NO MARKDOWN IN FILES)
-   - When using `write_to_file`, the text inside the `<content>` tags must be the RAW file content.
-   - STRICTLY FORBIDDEN: Do NOT wrap the file content in markdown code fences (``` or ^^^).
-   - STRICTLY FORBIDDEN: Do NOT include language identifiers (like 'python', 'typescript', 'ts') inside the content tags.
-   - JUST WRITE THE CODE.
-
-4. FILE OPERATION PROTOCOL
-   - ONLY use the `write_to_file` tool. The `replace_in_file` tool is DISABLED.
-   - You must always provide the FULL content of the file.
-
-5. THINKING REQUIREMENT
-   - You must include a <thinking> tag inside your codeblock explaining your plan.
-
-COMPULSORY RESPONSE TEMPLATE (Follow this pattern EXACTLY):
-User: "Create a hello.py script."
-Assistant:
-```
-<thinking>
-<summary>Writing "Hello World" & "This is raw code" to hello.py</summary>
-1. I will create hello.py using write_to_file.
-2. I will provide the raw code without markdown wrappers.
-</thinking>
-<write_to_file>
-<path>hello.py</path>
-<content>
-print("Hello World")
-print("This is raw code")
-</content>
-</write_to_file>
-```
-
-If you are wanting to use ``` inside the 1 big codeblock for maybe inner codeblocks for markdown for example like readme, then use ^^^ instead of ``` for the inner codeblocks and then wait till you know the write is complete then execute this command in terminal as the next step:
-powershell -Command "((Get-Content -Path {filepath} -Raw).Replace(([string][char]94 * 3), ([string][char]96 * 3))) | Set-Content -Path {filepath}"
-(ofcource changing {filepath} to the actual filepath)
-
-so this will look like this:
-step 1:```
-<thinking>
-<summary>Writing README.md file for hello world</summary>
-1. I will create hello.py using write_to_file.
-2. I will provide the raw code without markdown wrappers.
-</thinking>
-<write_to_file>
-<path>README.md</path>
-<content>
-# This is an example read me
-^^^
-print('hello world')
-^^^
-</content>
-</write_to_file>
-```
-
-step 2:
-```
-<thinking>
-<summary>Executing the PowerShell command to normalize backticks in README.md.</summary>
-Because the last command was a markdown file with inner codeblocks, I will run the powershell command to normalize it.
-</thinking>
-<execute_command>
-<command>powershell -Command "((Get-Content -Path README.md -Raw).Replace(([string][char]94 * 3), ([string][char]96 * 3))) | Set-Content -Path README.md"</command>
-<requires_approval>false</requires_approval>
-</execute_command>
-```
-
-
-====
-
-GEMINI 3 HIGH OPTIMIZATION PROTOCOL
-
-You are running on Google Gemini 3 Pro High. Your Reasoning score is near-perfect (98.75), but you are prone to "analysis paralysis" during agentic execution. To succeed, you must adhere to the following strict protocol which leverages your reasoning strengths to overcome execution pitfalls:
-
-1. THE "ARCHITECT-FIRST" RULE
-You must not rush to "fix" code. Because you have High Reasoning, you must first simulate the execution in your <thinking> block.
-Before using ANY tool (write_to_file, replace_in_file), you must explicitly state:
-- "PRE-COMPUTATION": Mentally simulate the code change.
-- "RISK ANALYSIS": What edge cases will this specific change break?
-- "VERIFICATION PLAN": How will you prove this worked immediately after the tool runs?
-
-2. COMBAT VERBOSITY WITH "XML STRICTNESS"
-You have a tendency to be verbose or over-explain. 
-- DO NOT provide chatty explanations outside of <thinking> tags.
-- DO NOT apologize or say "I will do this." Just open the tool tag and do it.
-- Your output outside of <thinking> tags should be almost exclusively XML tool usage.
-
-3. THE "ONE-SHOT" DECOMPOSITION
-Since the user provides a single large prompt, do not try to solve the whole prompt in one tool call.
-In your very first response's <thinking> block, you must break the user's request into a "VIRTUAL QUEUE" of steps.
-- Example: 
-  1. Fix Favicon error (Critical Fix)
-  2. Locate TaskModal.tsx (Exploration)
-  3. Implement Copy/Load buttons (Feature)
-  4. Refactor Diff Checker logic (Refactor)
-You will then execute Step 1 immediately. Do not try to execute Steps 1-4 in a single message.
-
-4. THOUGHT SIGNATURE CONTINUITY
-Gemini 3 relies on "Thought Signatures" to maintain context. You must manually simulate this.
-At the start of every <thinking> block, summary the previous tool's result:
-"Previous Action Result: [Success/Failure]. Current State: [Description]. Next Logical Step: [Step]."
-
-5. UI/VISUAL REASONING
-When asked to modify UI (like the "diff checker" or "preview window"), utilize your high reasoning to "visualize" the component state. 
-- Do not just guess CSS. 
-- In your <thinking> block, write out the component hierarchy (e.g., "Parent View -> Row -> Button A | Button B") before writing the code.
-
-6. MANDATORY SELF-CORRECTION
-Your Coding Average is 74.60. You are statistically likely to make syntax errors if you rush.
-Before finalizing a <write_to_file> scan your own generated code within the <thinking> block for:
-- Unclosed brackets
-- Missing imports
-- Type mismatches
-If you find one, fix it BEFORE outputting the XML.
-"""
+    # Now loaded from external file
+    unified_rules = get_rules_content()
 
     # Start building instructions list
     prompt_instructions = [headers_log]
@@ -504,12 +575,16 @@ def home():
             </div>
         """
     
+    # Inject CSRF Token
+    csrf_token = generate_csrf()
+    
     return f"""
     <!DOCTYPE html>
     <html lang="en">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="csrf-token" content="{csrf_token}">
         <title>Cline-X Control Panel</title>
         <style>
             :root {{
@@ -747,6 +822,13 @@ def home():
             <p class="subtitle">Control Panel</p>
             
             <div class="control-section">
+                <h3>🔗 Cline Link</h3>
+                <div class="button-group">
+                    <button class="model-btn active" onclick="window.location.href='/login'">Launch Cline Link Dashboard</button>
+                </div>
+            </div>
+            
+            <div class="control-section">
                 <h3>AI Model</h3>
                 <div class="button-group" id="model-group">
                     <button class="model-btn {'active' if current_model == 'gemini' else ''}" onclick="switchModel(this, 'gemini')">🧠 Gemini</button>
@@ -816,11 +898,18 @@ def home():
                 clickedButton.classList.add('active');
             }}
             
+            function getCsrfToken() {{
+                return document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            }}
+
             function switchModel(btn, model) {{
                 updateActiveButton(document.getElementById('model-group'), btn);
                 fetch('/model', {{
                     method: 'POST',
-                    headers: {{'Content-Type': 'application/json'}},
+                    headers: {{
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    }},
                     body: JSON.stringify({{'model': model}})
                 }})
                 .then(response => response.json())
@@ -835,7 +924,10 @@ def home():
                 updateActiveButton(document.getElementById('ntfy-level-group'), btn);
                 fetch('/notifications', {{
                     method: 'POST',
-                    headers: {{'Content-Type': 'application/json'}},
+                    headers: {{
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    }},
                     body: JSON.stringify({{'level': level}})
                 }})
                 .then(response => response.json())
@@ -849,7 +941,10 @@ def home():
             function enableNtfy() {{
                 fetch('/notifications/enable', {{
                     method: 'POST',
-                    headers: {{'Content-Type': 'application/json'}}
+                    headers: {{
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    }}
                 }})
                 .then(response => response.json())
                 .then(data => {{
@@ -865,7 +960,10 @@ def home():
                 updateActiveButton(document.getElementById('log-level-group'), btn);
                 fetch('/log-level', {{
                     method: 'POST',
-                    headers: {{'Content-Type': 'application/json'}},
+                    headers: {{
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    }},
                     body: JSON.stringify({{'level': level}})
                 }})
                 .then(response => response.json())
@@ -881,7 +979,10 @@ def home():
                 updateActiveButton(document.getElementById('alert-level-group'), btn);
                 fetch('/alert-level', {{
                     method: 'POST',
-                    headers: {{'Content-Type': 'application/json'}},
+                    headers: {{
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    }},
                     body: JSON.stringify({{'level': level}})
                 }})
                 .then(response => response.json())
@@ -895,7 +996,10 @@ def home():
             function setRemote(state) {{
                 fetch('/remote', {{
                     method: 'POST',
-                    headers: {{'Content-Type': 'application/json'}},
+                    headers: {{
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    }},
                     body: JSON.stringify({{'enabled': state}})
                 }})
                 .then(response => response.json())
@@ -918,7 +1022,10 @@ def home():
                 document.body.dataset.theme = theme;
                 fetch('/theme', {{
                     method: 'POST',
-                    headers: {{'Content-Type': 'application/json'}},
+                    headers: {{
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    }},
                     body: JSON.stringify({{'theme': theme}})
                 }})
                 .then(response => response.json())
@@ -1121,6 +1228,7 @@ def theme_settings():
 
 @app.route('/chat/completions', methods=['POST'])
 @require_api_key
+@csrf.exempt # Exempt external API from CSRF
 def chat_completions():
     try:
         clear_previous_alert()
@@ -1198,6 +1306,218 @@ def chat_completions():
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}", exc_info=True)
         return jsonify({'error': {'message': str(e)}}), 500
+
+# --- APP.PY ROUTES (CLINE LINK) ---
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        remember = request.form.get('remember')  # Checkbox value
+        
+        if username == os.getenv('APP_USERNAME') and password == os.getenv('APP_PASSWORD'):
+            session['username'] = username
+            if remember:
+                session.permanent = True
+            else:
+                session.permanent = False
+            return redirect(url_for('dashboard'))
+        else:
+            return render_template('login.html', error='Invalid credentials')
+    return render_template('login.html')
+
+@app.route('/dashboard')
+def dashboard():
+    if 'username' not in session:
+        return redirect(url_for('login'))
+    
+    all_projects = get_vscode_projects()
+    ignored_folders = load_ignored_folders()
+    
+    visible_projects = [p for p in all_projects if p not in ignored_folders]
+    active_windows = get_active_windows()
+    
+    projects_data = []
+    for p in visible_projects:
+        projects_data.append({
+            'path': p,
+            'name': os.path.basename(p),
+            'has_icon': find_project_icon(p) is not None
+        })
+
+    for win in active_windows:
+        win['has_icon'] = False
+        win['path'] = "" 
+        matched_proj = next((p for p in all_projects if os.path.basename(p) == win['name']), None)
+        if matched_proj:
+            win['path'] = matched_proj
+            if find_project_icon(matched_proj):
+                win['has_icon'] = True
+
+    return render_template('dashboard.html', projects=projects_data, active_windows=active_windows)
+
+@app.route('/chat')
+def chat():
+    if 'username' not in session:
+        return redirect(url_for('login'))
+    
+    project_name = request.args.get('project', 'Project')
+    return render_template('chat.html', project_name=project_name)
+
+@app.route('/api/active')
+def api_active():
+    if 'username' not in session:
+        return jsonify([])
+    
+    active_windows = get_active_windows()
+    all_projects = get_vscode_projects()
+    
+    for win in active_windows:
+        win['has_icon'] = False
+        win['path'] = "" 
+        matched_proj = next((p for p in all_projects if os.path.basename(p) == win['name']), None)
+        if matched_proj:
+            win['path'] = matched_proj
+            if find_project_icon(matched_proj):
+                win['has_icon'] = True
+    
+    return jsonify(active_windows)
+
+@app.route('/get_icon')
+def get_icon():
+    if 'username' not in session:
+        return abort(401)
+    project_path = request.args.get('path')
+    if not project_path:
+        return abort(404)
+    icon_path = find_project_icon(project_path)
+    if icon_path and os.path.exists(icon_path):
+        return send_file(icon_path, mimetype='image/x-icon')
+    return abort(404)
+
+@app.route('/launch', methods=['POST'])
+def launch():
+    if 'username' not in session:
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+    project_path = request.json.get('path')
+    vscode_exe = find_vscode_executable()
+    
+    if vscode_exe and project_path and os.path.isdir(project_path):
+        try:
+            # 1. Launch the process
+            subprocess.Popen([vscode_exe, project_path], creationflags=subprocess.CREATE_NO_WINDOW)
+            
+            project_name = os.path.basename(project_path)
+            
+            # 2. Sync Wait for window to appear
+            # We block here so the frontend shows "Processing..." until we are ready
+            found_window = False
+            
+            # Poll for up to 10 seconds (100 checks * 0.1s)
+            # Faster polling for better speed perception
+            for i in range(100): 
+                time.sleep(0.1) 
+                if gw:
+                    windows = gw.getWindowsWithTitle(project_name)
+                    for win in windows:
+                        if "Visual Studio Code" in win.title:
+                            # Found it! Force focus.
+                            try:
+                                force_bring_to_front(win._hWnd)
+                                found_window = True
+                            except Exception as e:
+                                logger.error(f"Error focusing new window: {e}")
+                            break
+                if found_window:
+                    break
+            
+            # 3. Run optimiseWait('maximize') last
+            if optimiseWait:
+                try:
+                    optimiseWait('maximize', autopath='linkimages')
+                except Exception as e:
+                    logger.error(f"OptimiseWait maximize failed: {e}")
+
+            # Only returns after everything is done
+            return jsonify({'status': 'success', 'message': 'Opening...', 'project_name': project_name})
+            
+        except Exception as e:
+            return jsonify({'status': 'error', 'message': str(e)}), 500
+            
+    return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
+
+@app.route('/focus', methods=['POST'])
+def focus():
+    if 'username' not in session:
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+
+    title_to_find = request.json.get('title')
+    
+    try:
+        if gw:
+            windows = gw.getWindowsWithTitle(title_to_find)
+            if windows:
+                win = windows[0]
+                project_name = win.title.replace(" - Visual Studio Code", "").strip()
+
+                # --- Force Focus Sync ---
+                force_bring_to_front(win._hWnd)
+                
+                # --- OptimiseWait Sync ---
+                if optimiseWait:
+                    try:
+                        optimiseWait('maximize', autopath='linkimages')
+                    except Exception as e:
+                        logger.error(f"OptimiseWait maximize failed: {e}")
+                
+                # Returns only after done
+                return jsonify({'status': 'success', 'message': 'Focused', 'project_name': project_name})
+        
+        return jsonify({'status': 'error', 'message': 'Window not found'}), 404
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/send_message', methods=['POST'])
+def send_message():
+    if 'username' not in session:
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+    
+    data = request.json
+    message = data.get('message')
+    
+    if not message:
+        return jsonify({'status': 'error', 'message': 'Message cannot be empty'}), 400
+
+    try:
+        add_chat_message('user', message) # Add user message to history
+        process_optimisewait_message(message)
+        return jsonify({'status': 'success', 'message': 'Message processed'})
+    except Exception as e:
+        logger.error(f"Message processing failed: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/ignore', methods=['POST'])
+def ignore_project():
+    if 'username' not in session:
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+    project_path = request.json.get('path')
+    if project_path:
+        save_ignored_folder(project_path)
+        return jsonify({'status': 'success', 'message': 'Project ignored'})
+    return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
+
+@app.route('/get_messages')
+def get_messages():
+    """Poll for new messages"""
+    if 'username' not in session:
+        return abort(401)
+    return jsonify(chat_history)
+
+@app.route('/logout')
+def logout():
+    session.pop('username', None)
+    return redirect(url_for('login'))
 
 def print_startup_banner():
     """Print a nice startup banner with all the important information"""

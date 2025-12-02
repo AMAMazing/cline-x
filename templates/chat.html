@@ -79,6 +79,14 @@
             line-height: 1.5;
             font-size: 15px; /* Slightly larger for readability */
             word-wrap: break-word;
+            position: relative;
+        }
+
+        .message .timestamp {
+            font-size: 0.75em;
+            opacity: 0.7;
+            margin-bottom: 4px;
+            display: block;
         }
 
         .message.sent {
@@ -191,9 +199,7 @@
 
     <div class="chat-container">
         <div class="messages-area" id="messages-area">
-            <div class="message received">
-                Connected to {{ project_name }}. Ready for commands.
-            </div>
+            <!-- Messages will be populated by JS -->
         </div>
 
         <div class="input-area">
@@ -206,24 +212,78 @@
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
         const messagesArea = document.getElementById('messages-area');
         const messageInput = document.getElementById('message-input');
+        
+        let lastMessageCount = 0;
 
-        function appendMessage(text, type) {
-            const div = document.createElement('div');
-            div.className = 'message ' + type;
-            div.textContent = text;
-            messagesArea.appendChild(div);
+        function renderMessages(messages) {
+            // Only update DOM if message count changed to avoid flickering
+            // In a real app we'd use IDs, but this works for simple append-only lists
+            if (messages.length === lastMessageCount) return;
+            
+            lastMessageCount = messages.length;
+            messagesArea.innerHTML = ''; // Clear current view
+            
+            if (messages.length === 0) {
+                const div = document.createElement('div');
+                div.className = 'message received';
+                div.textContent = "Connected to {{ project_name }}. Ready for commands.";
+                messagesArea.appendChild(div);
+            } else {
+                messages.forEach(msg => {
+                    const div = document.createElement('div');
+                    // role 'user' -> sent, 'system' -> received
+                    div.className = 'message ' + (msg.role === 'user' ? 'sent' : 'received');
+                    
+                    const timeSpan = document.createElement('span');
+                    timeSpan.className = 'timestamp';
+                    timeSpan.textContent = msg.time || '';
+                    
+                    const textSpan = document.createElement('div');
+                    textSpan.textContent = msg.text;
+                    
+                    div.appendChild(timeSpan);
+                    div.appendChild(textSpan);
+                    messagesArea.appendChild(div);
+                });
+            }
+            
+            // Auto scroll to bottom
             messagesArea.scrollTop = messagesArea.scrollHeight;
+        }
+
+        async function fetchMessages() {
+            try {
+                const response = await fetch('/get_messages');
+                if (response.ok) {
+                    const messages = await response.json();
+                    renderMessages(messages);
+                }
+            } catch (error) {
+                console.error('Polling error:', error);
+            }
         }
 
         async function sendMessage() {
             const text = messageInput.value.trim();
             if (!text) return;
 
-            // Clear input
+            // Clear input immediately for better UX
             messageInput.value = '';
             
-            // Show sent message
-            appendMessage(text, 'sent');
+            // Optimistically append message (will be corrected by next poll)
+            // We do this so the UI feels responsive
+            const pendingMsg = {
+                role: 'user',
+                text: text,
+                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+            };
+            
+            // Create a temp view update
+            const div = document.createElement('div');
+            div.className = 'message sent';
+            div.innerHTML = `<span class="timestamp">${pendingMsg.time}</span><div>${pendingMsg.text}</div>`;
+            messagesArea.appendChild(div);
+            messagesArea.scrollTop = messagesArea.scrollHeight;
 
             try {
                 const response = await fetch('/send_message', {
@@ -235,14 +295,14 @@
                 const data = await response.json();
                 
                 if (data.status === 'success') {
-                    // "proccessing request" as specifically requested
-                    appendMessage("proccessing request", 'received'); 
+                    // Force a poll to sync state
+                    fetchMessages();
                 } else {
-                    appendMessage("Error: " + data.message, 'received');
+                    alert("Error: " + data.message);
                 }
             } catch (error) {
                 console.error(error);
-                appendMessage("Failed to send message", 'received');
+                alert("Failed to send message");
             }
         }
 
@@ -254,11 +314,14 @@
             }
         });
         
-        // Focus input on load - on mobile this might pop keyboard, but usually okay.
-        // We will disable auto-focus on small screens to prevent keyboard popping immediately
+        // Focus input on load for desktop
         if (window.innerWidth > 768) {
             messageInput.focus();
         }
+
+        // Start Polling
+        fetchMessages(); // Initial fetch
+        setInterval(fetchMessages, 2000); // Poll every 2 seconds
     </script>
 </body>
 </html>
