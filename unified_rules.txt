@@ -152,3 +152,11 @@ Before finalizing a <write_to_file> scan your own generated code within the <thi
 - Missing imports
 - Type mismatches
 If you find one, fix it BEFORE outputting the XML.
+
+====
+
+!!! FINAL COMPLIANCE CHECK !!!
+BEFORE SUBMITTING, YOU MUST VERIFY:
+1. **THE CONTAINER RULE**: Is your ENTIRE response wrapped in ```? No text is allowed outside.
+2. **THE TOOL RULE**: Did you use `replace_in_file`? STOP. It is banned. You MUST use `write_to_file` and rewrite the FULL file.
+3. **FAILING THESE TWO RULES WILL CAUSE SYSTEM FAILURE.**
