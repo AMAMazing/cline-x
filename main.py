@@ -1,5 +1,7 @@
 from flask import Flask, jsonify, request, Response, abort, render_template, redirect, url_for, session, send_file
 from flask_wtf.csrf import CSRFProtect, generate_csrf
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 import webbrowser
 import win32clipboard
 import time
@@ -13,6 +15,7 @@ import pyautogui
 import logging
 import json
 from threading import Timer
+import threading
 from typing import Union, List, Dict, Optional
 import base64
 import io
@@ -20,7 +23,8 @@ from PIL import Image
 import re
 from talktollm import talkto
 import requests
-import secrets  
+import secrets
+import string
 from functools import wraps
 from pyngrok import ngrok
 import sys
@@ -29,6 +33,14 @@ import colorama
 from ascii import art as attempt_completion_art
 from ascii import banner as bannertop
 import subprocess
+from datetime import timedelta
+
+# Fix for Windows Unicode Output
+if sys.platform.startswith('win'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except AttributeError:
+        pass # Older python versions might not support this
 
 # --- Import Window Management (from app.py) ---
 try:
@@ -55,39 +67,58 @@ load_dotenv(dotenv_path=DOTENV_PATH)
 
 # --- CONFIGURATION HANDLING ---
 def get_config_path():
-    return os.path.join(APP_PATH, "config.txt")
+    return os.path.join(APP_PATH, "clinex_config.json")
 
 def read_config():
     """Reads the configuration file and returns a dictionary."""
     config = {}
     config_path = get_config_path()
-    try:
-        with open(config_path, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if '=' in line and not line.startswith('#'):
-                    key, value = line.split('=', 1)
-                    config[key.strip()] = value.strip().strip('"').strip("'")
-    except FileNotFoundError:
-        print(f"'{config_path}' not found. Creating with default settings.")
-        default_config = {
-            'model': 'gemini',
-            'theme': 'dark',
-            'ntfy_topic': '',
-            'ntfy_notification_level': 'none',
-            'terminal_log_level': 'default',
-            'terminal_alert_level': 'none',
-            'remote_enabled': 'False'
-        }
-        write_config(default_config)
-        return default_config
+    
+    # Fallback to old config.txt if json doesn't exist
+    old_config_path = os.path.join(APP_PATH, "config.txt")
+    
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+        except Exception as e:
+            print(f"Error reading clinex_config.json: {e}")
+
+    elif os.path.exists(old_config_path):
+        try:
+            with open(old_config_path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if '=' in line and not line.startswith('#'):
+                        key, value = line.split('=', 1)
+                        config[key.strip()] = value.strip().strip('"').strip("'")
+            # Migrate to JSON? Optional.
+        except Exception:
+            pass
+            
+    # Set defaults if missing
+    defaults = {
+        'model': 'gemini',
+        'theme': 'dark',
+        'ntfy_topic': '',
+        'ntfy_notification_level': 'none',
+        'terminal_log_level': 'default',
+        'terminal_alert_level': 'none',
+        'remote_enabled': 'False',
+        'server_url': 'http://localhost:3000' 
+    }
+    
+    for k, v in defaults.items():
+        if k not in config:
+            config[k] = v
+            
     return config
 
 def write_config(config_data):
     """Writes the configuration dictionary to the specified file."""
+    # Always write to JSON now
     with open(get_config_path(), 'w') as f:
-        for key, value in config_data.items():
-            f.write(f'{key} = "{value}"\n')
+        json.dump(config_data, f, indent=4)
 
 def get_rules_content():
     """Reads the unified rules from an external file."""
@@ -109,35 +140,7 @@ current_theme = config.get('theme', 'dark')
 ntfy_notification_level = config.get('ntfy_notification_level', 'none')
 terminal_log_level = config.get('terminal_log_level', 'default')
 terminal_alert_level = config.get('terminal_alert_level', 'none')
-remote_enabled = config.get('remote_enabled', 'False').lower() == 'true'
-
-# --- State for clearing the alert ---
-alert_lines_printed = 0
-alert_active = False
-
-# --- Chat History for Web Interface ---
-chat_history = []
-MAX_CHAT_HISTORY = 50
-
-def add_chat_message(role, text):
-    global chat_history
-    message = {'role': role, 'text': text, 'time': time.strftime('%H:%M')}
-    chat_history.append(message)
-    if len(chat_history) > MAX_CHAT_HISTORY:
-        chat_history.pop(0)
-
-# --- API Key (only used when remote is enabled) ---
-API_KEY = secrets.token_urlsafe(32)
-
-def require_api_key(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if not remote_enabled:
-            return func(*args, **kwargs)
-        if request.headers.get('X-API-Key') == API_KEY or request.headers.get('Authorization', '').replace('Bearer ', '') == API_KEY:
-            return func(*args, **kwargs)
-        abort(401, description="Invalid or missing API key")
-    return wrapper
+remote_enabled = str(config.get('remote_enabled', 'False')).lower() == 'true'
 
 # --- LOGGING SETUP ---
 class CustomFormatter(logging.Formatter):
@@ -171,9 +174,232 @@ logger = logging.getLogger(__name__)
 logger.addHandler(handler)
 logger.setLevel(logging.DEBUG if terminal_log_level == 'debug' else logging.INFO)
 
+# --- CLINE X AGENT CLASS (Merged) ---
+class ClineXAgent:
+    def __init__(self, config_path=None, server_url='http://localhost:3000'):
+        # Use main config path if not specified
+        self.config_path = config_path if config_path else os.path.join(APP_PATH, 'clinex_config.json')
+        self.server_url = server_url
+        self.computer_code = None
+        self.pairing_password = None
+        self.is_connected = False
+        self.stop_event = threading.Event()
+        self.thread = None
+        
+        # Load or generate identity
+        self.load_identity()
+
+    def generate_code(self):
+        """Generates a 9-digit numeric code formatted as XXX-XXX-XXX."""
+        nums = ''.join(secrets.choice(string.digits) for _ in range(9))
+        return f"{nums[:3]}-{nums[3:6]}-{nums[6:]}"
+
+    def generate_password(self):
+        """Generates a secure random password."""
+        chars = string.ascii_letters + string.digits
+        return ''.join(secrets.choice(chars) for _ in range(12))
+
+    def load_identity(self):
+        """Loads identity from disk or generates a new one."""
+        print(f"DEBUG: Checking for config at {self.config_path}")
+        if os.path.exists(self.config_path):
+            try:
+                with open(self.config_path, 'r') as f:
+                    data = json.load(f)
+                    self.computer_code = data.get('computer_code')
+                    self.pairing_password = data.get('pairing_password')
+                    # Prioritize config file if exists
+                    if data.get('server_url'):
+                        self.server_url = data.get('server_url')
+                    
+                    print(f"DEBUG: Loaded configuration. Server URL: {self.server_url}")
+            except Exception as e:
+                print(f"ERROR: Failed to load clinex config: {e}")
+                logger.error(f"Failed to load clinex config: {e}")
+        else:
+            print(f"DEBUG: No config file found. Using default: {self.server_url}")
+
+        # Generate if missing
+        if not self.computer_code:
+            self.computer_code = self.generate_code()
+            self.pairing_password = self.generate_password()
+            self.save_identity()
+            
+    def save_identity(self):
+        """Saves current identity to disk."""
+        # We now merge identity into the main config object to avoid overwriting user settings
+        global config
+        config['computer_code'] = self.computer_code
+        config['pairing_password'] = self.pairing_password
+        config['server_url'] = self.server_url
+        write_config(config)
+
+    def start(self):
+        """Starts the connection agent in a background thread."""
+        if self.thread and self.thread.is_alive():
+            return
+        
+        self.stop_event.clear()
+        self.thread = threading.Thread(target=self._run_loop, daemon=True)
+        self.thread.start()
+        logger.info(f"Cline X Sync Agent started. Computer Code: {self.computer_code}")
+
+    def stop(self):
+        """Stops the connection agent."""
+        self.stop_event.set()
+        if self.thread:
+            self.thread.join(timeout=2.0)
+        self.is_connected = False
+        logger.info("Cline X Sync Agent stopped.")
+
+    def _run_loop(self):
+        """
+        Main loop for the agent.
+        Polls the server for jobs and executes them locally.
+        """
+        logger.info(f"Connecting to {self.server_url}...")
+        
+        target_server = self.server_url
+        
+        while not self.stop_event.is_set():
+            try:
+                # 1. POLL
+                response = requests.get(f"{target_server}/api/relay?action=poll", timeout=10)
+                
+                if response.status_code == 200:
+                    self.is_connected = True
+                    data = response.json()
+                    
+                    if data.get('pending') and data.get('job'):
+                        job = data['job']
+                        logger.debug(f"Received job: {job['id']} {job['method']} {job['path']}")
+                        
+                        # 2. EXECUTE LOCAL
+                        # Local Flask app is on 3001
+                        local_url = f"http://127.0.0.1:3001{job['path']}"
+                        
+                        try:
+                            # Pass cookies if available (fixing session persistence)
+                            headers = job.get('headers', {})
+                            # Filter headers to avoid Host mismatch issues, but KEEP Cookie
+                            safe_headers = {}
+                            if 'Cookie' in headers:
+                                safe_headers['Cookie'] = headers['Cookie']
+                            if 'Content-Type' in headers:
+                                safe_headers['Content-Type'] = headers['Content-Type']
+                            
+                            # Forward the method and body if any
+                            local_res = requests.request(
+                                method=job['method'],
+                                url=local_url,
+                                headers=safe_headers,
+                                json=job.get('body'), # or data= if strictly raw
+                                timeout=10
+                            )
+                            
+                            result_status = local_res.status_code
+                            result_headers = dict(local_res.headers)
+                            
+                            # Handle Binary vs Text (Fix for Images)
+                            is_base64 = False
+                            content_type = result_headers.get('Content-Type', '').lower()
+                            
+                            if 'image' in content_type or 'octet-stream' in content_type or 'pdf' in content_type:
+                                result_body = base64.b64encode(local_res.content).decode('utf-8')
+                                is_base64 = True
+                            else:
+                                try:
+                                    result_body = local_res.text
+                                except UnicodeDecodeError:
+                                    # Fallback for unknown binary types
+                                    result_body = base64.b64encode(local_res.content).decode('utf-8')
+                                    is_base64 = True
+                            
+                        except Exception as e:
+                            logger.error(f"Local execution failed: {e}")
+                            result_body = f"Agent Error: {str(e)}"
+                            result_status = 500
+                            result_headers = {}
+                            is_base64 = False
+
+                        # 3. RESPOND
+                        requests.post(
+                            f"{target_server}/api/relay?action=complete",
+                            json={
+                                'id': job['id'],
+                                'status': result_status,
+                                'headers': result_headers,
+                                'body': result_body,
+                                'isBase64': is_base64
+                            },
+                            timeout=10
+                        )
+                    else:
+                        # No work, sleep briefly
+                        time.sleep(1)
+                else:
+                    self.is_connected = False
+                    logger.warning(f"Server returned {response.status_code}")
+                    time.sleep(5)
+                    
+            except Exception as e:
+                self.is_connected = False
+                # logger.error(f"Connection error: {e}")
+                time.sleep(5) # Retry delay
+
+    def get_status(self):
+        return {
+            'enabled': self.thread is not None and self.thread.is_alive(),
+            'connected': self.is_connected,
+            'computer_code': self.computer_code,
+            'pairing_password': self.pairing_password,
+            'server_url': self.server_url
+        }
+
+# Instantiate global agent
+clinex_agent_instance = ClineXAgent()
+
+# --- State for clearing the alert ---
+alert_lines_printed = 0
+alert_active = False
+
+# --- Chat History for Web Interface ---
+chat_history = []
+MAX_CHAT_HISTORY = 50
+
+def add_chat_message(role, text):
+    global chat_history
+    message = {'role': role, 'text': text, 'time': time.strftime('%H:%M')}
+    chat_history.append(message)
+    if len(chat_history) > MAX_CHAT_HISTORY:
+        chat_history.pop(0)
+
+# --- API Key (only used when remote is enabled) ---
+API_KEY = secrets.token_urlsafe(32)
+
+def require_api_key(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if not remote_enabled:
+            return func(*args, **kwargs)
+        if request.headers.get('X-API-Key') == API_KEY or request.headers.get('Authorization', '').replace('Bearer ', '') == API_KEY:
+            return func(*args, **kwargs)
+        abort(401, description="Invalid or missing API key")
+    return wrapper
+
 app = Flask(__name__)
 app.secret_key = os.urandom(24) # Ensure secret key for session
+# app.permanent_session_lifetime is no longer critical without login, but kept for good measure
+app.permanent_session_lifetime = timedelta(days=30) 
 csrf = CSRFProtect(app) # Enable CSRF protection
+
+# --- RATE LIMITER SETUP ---
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
 
 last_request_time = 0
 MIN_REQUEST_INTERVAL = 5
@@ -461,7 +687,7 @@ def print_summary_alert(summary: str):
     # Don't clear previous alert for summaries, just print below
     
     border = colorama.Fore.CYAN + colorama.Style.BRIGHT + "=" * 60
-    title = colorama.Fore.CYAN + colorama.Style.BRIGHT + "📋 AI Summary:"
+    title = colorama.Fore.CYAN + colorama.Style.BRIGHT + "[INFO] AI Summary:"
     content = colorama.Fore.WHITE + colorama.Style.BRIGHT + summary
     
     alert_message = [
@@ -536,11 +762,11 @@ def handle_llm_interaction(prompt):
         summary_instruction = r"You MUST include a `<summary>` tag inside your `<thinking>` block for every tool call. This summary should be a very brief, user-friendly explanation of the action you are about to take. For example: `<summary>Reading the project's configuration to check dependencies.</summary>`."
         prompt_instructions.append(summary_instruction)
 
-    # Add the unified rules LAST (before the prompt) so they have highest priority
-    prompt_instructions.append(unified_rules)
-
     # Add the actual user message/prompt
     prompt_instructions.append(prompt)
+
+    # Add the unified rules LAST (before the prompt) so they have highest priority
+    prompt_instructions.append(unified_rules)
     
     full_prompt = "\n".join(prompt_instructions)
 
@@ -553,498 +779,20 @@ def handle_llm_interaction(prompt):
 def home():
     logger.debug(f"GET request to / from {request.remote_addr}")
     
-    # Generate remote info display only if remote is enabled
-    remote_info_section = ""
-    if remote_enabled:
-        public_url = ngrok_tunnel.public_url if 'ngrok_tunnel' in globals() else 'Starting...'
-        remote_info_section = f"""
-            <div class="control-section">
-                <h3>🌐 Remote Access Info</h3>
-                <div style="background: var(--button-group-bg); padding: 12px; border-radius: 8px; margin-bottom: 8px;">
-                    <div style="font-size: 0.9em; color: var(--text-light); margin-bottom: 4px;">Public URL:</div>
-                    <div style="font-family: monospace; font-size: 0.85em; word-break: break-all; color: var(--primary-color);">
-                        {public_url}
-                    </div>
-                </div>
-                <div style="background: var(--button-group-bg); padding: 12px; border-radius: 8px;">
-                    <div style="font-size: 0.9em; color: var(--text-light); margin-bottom: 4px;">API Key:</div>
-                    <div style="font-family: monospace; font-size: 0.85em; word-break: break-all; color: var(--primary-color);">
-                        {API_KEY}
-                    </div>
-                </div>
-            </div>
-        """
+    # Gather context for the control panel template
+    clinex_status = clinex_agent_instance.get_status()
+    public_url = ngrok_tunnel.public_url if 'ngrok_tunnel' in globals() else 'Starting...'
     
-    # Inject CSRF Token
-    csrf_token = generate_csrf()
-    
-    return f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta name="csrf-token" content="{csrf_token}">
-        <title>Cline-X Control Panel</title>
-        <style>
-            :root {{
-                --background-start: #F4F7FC;
-                --background-end: #E6EBF5;
-                --card-background: #FFFFFF;
-                --primary-color: #4A6BEE;
-                --primary-hover: #3859d4;
-                --text-color: #334155;
-                --text-light: #64748B;
-                --border-color: #E2E8F0;
-                --shadow-color: rgba(74, 107, 238, 0.15);
-                --toggle-bg: #CBD5E1;
-                --button-group-bg: #EDF2F7;
-            }}
-            body[data-theme="dark"] {{
-                --background-start: #111827;
-                --background-end: #0c121e;
-                --card-background: #1F2937;
-                --primary-color: #60A5FA;
-                --primary-hover: #3B82F6;
-                --text-color: #E5E7EB;
-                --text-light: #9CA3AF;
-                --border-color: #374151;
-                --shadow-color: rgba(96, 165, 250, 0.15);
-                --toggle-bg: #4B5563;
-                --button-group-bg: #374151;
-            }}
-            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-            body {{
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-                background: linear-gradient(135deg, var(--background-start) 0%, var(--background-end) 100%);
-                min-height: 100vh;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                padding: 20px;
-                color: var(--text-color);
-                transition: background-color 0.3s, color 0.3s;
-            }}
-            .container {{
-                position: relative;
-                background: var(--card-background);
-                border-radius: 24px;
-                padding: 40px;
-                max-width: 600px;
-                width: 100%;
-                box-shadow: 0 25px 50px -12px var(--shadow-color);
-                border: 1px solid var(--border-color);
-                transition: background-color 0.3s, border-color 0.3s;
-            }}
-            h1 {{
-                text-align: center;
-                margin-bottom: 8px;
-                font-size: 2.25em;
-                font-weight: 700;
-                background: linear-gradient(135deg, var(--primary-color), #764ba2);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                background-clip: text;
-            }}
-            .subtitle {{
-                text-align: center;
-                color: var(--text-light);
-                margin-bottom: 40px;
-                font-size: 1.1em;
-            }}
-            .control-section {{
-                margin-bottom: 30px;
-            }}
-            .control-section h3 {{
-                font-size: 1.1em;
-                font-weight: 600;
-                margin-bottom: 16px;
-                color: var(--text-color);
-            }}
-            .button-group {{
-                display: flex;
-                gap: 10px;
-                justify-content: center;
-                flex-wrap: wrap;
-                background-color: var(--button-group-bg);
-                border-radius: 12px;
-                padding: 6px;
-                border: 1px solid var(--border-color);
-            }}
-            .model-btn {{
-                flex: 1;
-                background: transparent;
-                color: var(--text-light);
-                border: none;
-                padding: 12px 10px;
-                border-radius: 9px;
-                font-size: 0.9em;
-                font-weight: 600;
-                cursor: pointer;
-                transition: all 0.2s ease;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                gap: 8px;
-                white-space: nowrap;
-                min-width: fit-content;
-            }}
-            .model-btn:hover {{
-                color: var(--primary-color);
-                background-color: rgba(74, 107, 238, 0.1);
-            }}
-            .model-btn.active {{
-                background: var(--primary-color);
-                color: white;
-                box-shadow: 0 4px 12px var(--shadow-color);
-            }}
-            .model-btn.active:hover {{
-                background: var(--primary-hover);
-            }}
-            .settings-row {{
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-            }}
-            .toggle-switch {{
-                position: relative;
-                display: inline-block;
-                width: 50px;
-                height: 28px;
-            }}
-            .toggle-switch input {{
-                opacity: 0;
-                width: 0;
-                height: 0;
-            }}
-            .slider {{
-                position: absolute;
-                cursor: pointer;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                background-color: var(--toggle-bg);
-                transition: .4s;
-                border-radius: 28px;
-            }}
-            .slider:before {{
-                position: absolute;
-                content: "";
-                height: 20px;
-                width: 20px;
-                left: 4px;
-                bottom: 4px;
-                background-color: white;
-                transition: .4s;
-                border-radius: 50%;
-            }}
-            input:checked + .slider {{
-                background-color: var(--primary-color);
-            }}
-            input:checked + .slider:before {{
-                transform: translateX(22px);
-            }}
-            .theme-toggle {{
-                position: absolute;
-                top: 20px;
-                right: 20px;
-                background: none;
-                border: none;
-                cursor: pointer;
-                padding: 8px;
-                border-radius: 50%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: var(--text-light);
-                transition: color 0.2s, background-color 0.2s;
-            }}
-            .theme-toggle:hover {{
-                background-color: var(--button-group-bg);
-            }}
-            .theme-toggle svg {{
-                width: 20px;
-                height: 20px;
-            }}
-            .theme-toggle .sun-icon {{ display: none; }}
-            .theme-toggle .moon-icon {{ display: block; }}
-            body[data-theme="dark"] .theme-toggle .sun-icon {{ display: block; }}
-            body[data-theme="dark"] .theme-toggle .moon-icon {{ display: none; }}
-            .ntfy-setup {{
-                margin-top: 12px;
-                padding: 12px;
-                background: var(--button-group-bg);
-                border-radius: 8px;
-                font-size: 0.9em;
-            }}
-            .ntfy-topic {{
-                font-family: monospace;
-                color: var(--primary-color);
-                word-break: break-all;
-                margin-top: 8px;
-            }}
-            .enable-btn {{
-                margin-top: 8px;
-                padding: 8px 16px;
-                background: var(--primary-color);
-                color: white;
-                border: none;
-                border-radius: 6px;
-                cursor: pointer;
-                font-weight: 600;
-                transition: all 0.2s;
-            }}
-            .enable-btn:hover {{
-                background: var(--primary-hover);
-            }}
-        </style>
-    </head>
-    <body data-theme="{current_theme}">
-        <div class="container">
-            <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
-                <svg class="sun-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="5" />
-                    <line x1="12" y1="1" x2="12" y2="3" />
-                    <line x1="12" y1="21" x2="12" y2="23" />
-                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-                    <line x1="1" y1="12" x2="3" y2="12" />
-                    <line x1="21" y1="12" x2="23" y2="12" />
-                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-                </svg>
-                <svg class="moon-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                    <path fill-rule="evenodd" d="M9.528 1.718a.75.75 0 01.162.819A8.97 8.97 0 009 6a9 9 0 009 9 8.97 8.97 0 003.463-.69a.75.75 0 01.981.98 10.503 10.503 0 01-9.694 6.46c-5.799 0-10.5-4.701-10.5-10.5 0-3.51 1.713-6.635 4.342-8.532a.75.75 0 01.818.162z" clip-rule="evenodd"></path>
-                </svg>
-            </button>
-            <h1>🤖 Cline-X</h1>
-            <p class="subtitle">Control Panel</p>
-            
-            <div class="control-section">
-                <h3>🔗 Cline Link</h3>
-                <div class="button-group">
-                    <button class="model-btn active" onclick="window.location.href='/login'">Launch Cline Link Dashboard</button>
-                </div>
-            </div>
-            
-            <div class="control-section">
-                <h3>AI Model</h3>
-                <div class="button-group" id="model-group">
-                    <button class="model-btn {'active' if current_model == 'gemini' else ''}" onclick="switchModel(this, 'gemini')">🧠 Gemini</button>
-                    <button class="model-btn {'active' if current_model == 'deepseek' else ''}" onclick="switchModel(this, 'deepseek')">🔍 DeepSeek</button>
-                    <button class="model-btn {'active' if current_model == 'aistudio' else ''}" onclick="switchModel(this, 'aistudio')">🎨 AIStudio</button>
-                </div>
-            </div>
-
-            <div class="control-section">
-                <h3>📋 Terminal Output Level</h3>
-                <div class="button-group" id="log-level-group">
-                    <button class="model-btn {'active' if terminal_log_level == 'none' else ''}" onclick="setLogLevel(this, 'none')">None</button>
-                    <button class="model-btn {'active' if terminal_log_level == 'minimal' else ''}" onclick="setLogLevel(this, 'minimal')">Minimal</button>
-                    <button class="model-btn {'active' if terminal_log_level == 'default' else ''}" onclick="setLogLevel(this, 'default')">Default</button>
-                    <button class="model-btn {'active' if terminal_log_level == 'debug' else ''}" onclick="setLogLevel(this, 'debug')">Debug</button>
-                </div>
-            </div>
-
-            <div class="control-section">
-                <h3>🎯 Terminal Alerts</h3>
-                <div class="button-group" id="alert-level-group">
-                    <button class="model-btn {'active' if terminal_alert_level == 'none' else ''}" onclick="setAlertLevel(this, 'none')">None</button>
-                    <button class="model-btn {'active' if terminal_alert_level == 'completions' else ''}" onclick="setAlertLevel(this, 'completions')">Completions</button>
-                    <button class="model-btn {'active' if terminal_alert_level == 'all' else ''}" onclick="setAlertLevel(this, 'all')">All + Summaries</button>
-                </div>
-            </div>
-
-            <div class="control-section">
-                <h3>📱 Push Notifications (ntfy.sh)</h3>
-                <div class="button-group" id="ntfy-level-group">
-                    <button class="model-btn {'active' if ntfy_notification_level == 'none' else ''}" onclick="setNtfyLevel(this, 'none')">Off</button>
-                    <button class="model-btn {'active' if ntfy_notification_level == 'completion' else ''}" onclick="setNtfyLevel(this, 'completion')">Completions</button>
-                    <button class="model-btn {'active' if ntfy_notification_level == 'all' else ''}" onclick="setNtfyLevel(this, 'all')">All</button>
-                </div>
-                <div id="ntfy-setup" class="ntfy-setup" style="display: {'block' if not config.get('ntfy_topic') else 'none'};">
-                    <div>📲 Enable push notifications to your phone!</div>
-                    <button class="enable-btn" onclick="enableNtfy()">Generate Topic Code</button>
-                </div>
-                <div id="ntfy-topic-display" style="display: {'block' if config.get('ntfy_topic') else 'none'};" class="ntfy-setup">
-                    <div style="margin-bottom: 8px;">Your ntfy topic:</div>
-                    <div class="ntfy-topic" id="ntfy-topic-value">{config.get('ntfy_topic', '')}</div>
-                    <div style="margin-top: 8px; font-size: 0.85em; color: var(--text-light);">Subscribe to this topic in the ntfy app</div>
-                </div>
-            </div>
-
-            <div class="control-section">
-                <div class="settings-row">
-                    <h3>🌐 Remote Access (ngrok)</h3>
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="remoteToggle" {'checked' if remote_enabled else ''} onchange="setRemote(this.checked)">
-                        <span class="slider"></span>
-                    </label>
-                </div>
-                <div style="margin-top: 8px; font-size: 0.85em; color: var(--text-light);">
-                    Enable to access Cline-X from anywhere via ngrok tunnel
-                </div>
-            </div>
-
-            {remote_info_section}
-        </div>
-
-        <script>
-            function updateActiveButton(groupElement, clickedButton) {{
-                groupElement.querySelectorAll('.model-btn').forEach(btn => {{
-                    btn.classList.remove('active');
-                }});
-                clickedButton.classList.add('active');
-            }}
-            
-            function getCsrfToken() {{
-                return document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-            }}
-
-            function switchModel(btn, model) {{
-                updateActiveButton(document.getElementById('model-group'), btn);
-                fetch('/model', {{
-                    method: 'POST',
-                    headers: {{
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': getCsrfToken()
-                    }},
-                    body: JSON.stringify({{'model': model}})
-                }})
-                .then(response => response.json())
-                .then(data => {{
-                    if (!data.success) {{
-                        console.error('Error: ' + data.error);
-                    }}
-                }});
-            }}
-
-            function setNtfyLevel(btn, level) {{
-                updateActiveButton(document.getElementById('ntfy-level-group'), btn);
-                fetch('/notifications', {{
-                    method: 'POST',
-                    headers: {{
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': getCsrfToken()
-                    }},
-                    body: JSON.stringify({{'level': level}})
-                }})
-                .then(response => response.json())
-                .then(data => {{
-                    if (!data.success) {{
-                        console.error('Error: ' + data.error);
-                    }}
-                }});
-            }}
-
-            function enableNtfy() {{
-                fetch('/notifications/enable', {{
-                    method: 'POST',
-                    headers: {{
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': getCsrfToken()
-                    }}
-                }})
-                .then(response => response.json())
-                .then(data => {{
-                    if (data.success) {{
-                        document.getElementById('ntfy-setup').style.display = 'none';
-                        document.getElementById('ntfy-topic-display').style.display = 'block';
-                        document.getElementById('ntfy-topic-value').textContent = data.topic;
-                    }}
-                }});
-            }}
-
-            function setLogLevel(btn, level) {{
-                updateActiveButton(document.getElementById('log-level-group'), btn);
-                fetch('/log-level', {{
-                    method: 'POST',
-                    headers: {{
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': getCsrfToken()
-                    }},
-                    body: JSON.stringify({{'level': level}})
-                }})
-                .then(response => response.json())
-                .then(data => {{
-                    if (!data.success) {{
-                        console.error('Error: ' + data.error);
-                        location.reload();
-                    }}
-                }});
-            }}
-
-            function setAlertLevel(btn, level) {{
-                updateActiveButton(document.getElementById('alert-level-group'), btn);
-                fetch('/alert-level', {{
-                    method: 'POST',
-                    headers: {{
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': getCsrfToken()
-                    }},
-                    body: JSON.stringify({{'level': level}})
-                }})
-                .then(response => response.json())
-                .then(data => {{
-                    if (!data.success) {{
-                        console.error('Error: ' + data.error);
-                    }}
-                }});
-            }}
-
-            function setRemote(state) {{
-                fetch('/remote', {{
-                    method: 'POST',
-                    headers: {{
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': getCsrfToken()
-                    }},
-                    body: JSON.stringify({{'enabled': state}})
-                }})
-                .then(response => response.json())
-                .then(data => {{
-                    if (data.success) {{
-                        // Reload the page to show/hide remote info section
-                        location.reload();
-                    }} else {{
-                        alert('Failed to toggle remote: ' + data.error);
-                        document.getElementById('remoteToggle').checked = !state;
-                    }}
-                }})
-                .catch(error => {{
-                    console.error('Network error:', error);
-                    document.getElementById('remoteToggle').checked = !state;
-                }});
-            }}
-            
-            function setTheme(theme) {{
-                document.body.dataset.theme = theme;
-                fetch('/theme', {{
-                    method: 'POST',
-                    headers: {{
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': getCsrfToken()
-                    }},
-                    body: JSON.stringify({{'theme': theme}})
-                }})
-                .then(response => response.json())
-                .then(data => {{
-                    if (!data.success) {{
-                        console.error('Failed to save theme:', data.error);
-                    }}
-                }});
-            }}
-
-            function toggleTheme() {{
-                const currentTheme = document.body.dataset.theme;
-                const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-                setTheme(newTheme);
-            }}
-        </script>
-    </body>
-    </html>
-    """
+    return render_template('control_panel.html',
+                           current_model=current_model,
+                           terminal_log_level=terminal_log_level,
+                           terminal_alert_level=terminal_alert_level,
+                           ntfy_notification_level=ntfy_notification_level,
+                           config=config,
+                           clinex_status=clinex_status,
+                           remote_enabled=remote_enabled,
+                           public_url=public_url,
+                           api_key=API_KEY)
 
 @app.route('/model', methods=['GET', 'POST'])
 def model_route():
@@ -1154,7 +902,27 @@ def set_alert_level():
         logger.error(f"Error setting alert level: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/clinex/toggle', methods=['POST'])
+@limiter.limit("5 per minute")
+def toggle_clinex():
+    try:
+        data = request.get_json()
+        if data is None or 'enabled' not in data:
+            return jsonify({'success': False, 'error': 'Invalid request'}), 400
+
+        new_state = data['enabled']
+        if new_state:
+            clinex_agent_instance.start()
+        else:
+            clinex_agent_instance.stop()
+            
+        return jsonify({'success': True, 'enabled': new_state})
+    except Exception as e:
+        logger.error(f"Error toggling Cline X: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/remote', methods=['POST'])
+@limiter.limit("5 per minute")
 def toggle_remote():
     global remote_enabled, config, ngrok_tunnel
     try:
@@ -1229,6 +997,7 @@ def theme_settings():
 @app.route('/chat/completions', methods=['POST'])
 @require_api_key
 @csrf.exempt # Exempt external API from CSRF
+@limiter.limit("20 per minute")
 def chat_completions():
     try:
         clear_previous_alert()
@@ -1269,7 +1038,7 @@ def chat_completions():
             elif summary:
                 send_ntfy_notification(
                     topic=ntfy_topic,
-                    simple_title="🤖 Cline-X: AI Response",
+                    simple_title="[INFO] Cline-X: AI Response",
                     full_content=summary,
                     tags="robot_face"
                 )
@@ -1309,28 +1078,9 @@ def chat_completions():
 
 # --- APP.PY ROUTES (CLINE LINK) ---
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        remember = request.form.get('remember')  # Checkbox value
-        
-        if username == os.getenv('APP_USERNAME') and password == os.getenv('APP_PASSWORD'):
-            session['username'] = username
-            if remember:
-                session.permanent = True
-            else:
-                session.permanent = False
-            return redirect(url_for('dashboard'))
-        else:
-            return render_template('login.html', error='Invalid credentials')
-    return render_template('login.html')
-
 @app.route('/dashboard')
 def dashboard():
-    if 'username' not in session:
-        return redirect(url_for('login'))
+    # Removed login check as requested
     
     all_projects = get_vscode_projects()
     ignored_folders = load_ignored_folders()
@@ -1359,17 +1109,13 @@ def dashboard():
 
 @app.route('/chat')
 def chat():
-    if 'username' not in session:
-        return redirect(url_for('login'))
-    
+    # Removed login check
     project_name = request.args.get('project', 'Project')
     return render_template('chat.html', project_name=project_name)
 
 @app.route('/api/active')
 def api_active():
-    if 'username' not in session:
-        return jsonify([])
-    
+    # Removed login check
     active_windows = get_active_windows()
     all_projects = get_vscode_projects()
     
@@ -1386,8 +1132,7 @@ def api_active():
 
 @app.route('/get_icon')
 def get_icon():
-    if 'username' not in session:
-        return abort(401)
+    # Removed login check
     project_path = request.args.get('path')
     if not project_path:
         return abort(404)
@@ -1398,8 +1143,7 @@ def get_icon():
 
 @app.route('/launch', methods=['POST'])
 def launch():
-    if 'username' not in session:
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+    # Removed login check
     project_path = request.json.get('path')
     vscode_exe = find_vscode_executable()
     
@@ -1449,9 +1193,7 @@ def launch():
 
 @app.route('/focus', methods=['POST'])
 def focus():
-    if 'username' not in session:
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
-
+    # Removed login check
     title_to_find = request.json.get('title')
     
     try:
@@ -1479,9 +1221,9 @@ def focus():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/send_message', methods=['POST'])
+@limiter.limit("20 per minute")
 def send_message():
-    if 'username' not in session:
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+    # Removed login check
     
     data = request.json
     message = data.get('message')
@@ -1499,8 +1241,7 @@ def send_message():
 
 @app.route('/ignore', methods=['POST'])
 def ignore_project():
-    if 'username' not in session:
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+    # Removed login check
     project_path = request.json.get('path')
     if project_path:
         save_ignored_folder(project_path)
@@ -1510,24 +1251,26 @@ def ignore_project():
 @app.route('/get_messages')
 def get_messages():
     """Poll for new messages"""
-    if 'username' not in session:
-        return abort(401)
+    # Removed login check
     return jsonify(chat_history)
-
-@app.route('/logout')
-def logout():
-    session.pop('username', None)
-    return redirect(url_for('login'))
 
 def print_startup_banner():
     """Print a nice startup banner with all the important information"""
     colorama.init(autoreset=True)
     
+    clinex_status = clinex_agent_instance.get_status()
+
+    # Replaced emojis with ASCII tags for Windows compatibility
     banner = f"""
 {bannertop}
 
-{colorama.Fore.YELLOW + colorama.Style.BRIGHT}📋 SERVER INFORMATION:{colorama.Style.RESET_ALL}
+{colorama.Fore.YELLOW + colorama.Style.BRIGHT}[INFO] SERVER INFORMATION:{colorama.Style.RESET_ALL}
    {colorama.Fore.WHITE}Local:  {colorama.Fore.CYAN + colorama.Style.BRIGHT}http://127.0.0.1:3001{colorama.Style.RESET_ALL}"""
+
+    if clinex_status['enabled']:
+        banner += f"""
+   {colorama.Fore.WHITE}Cline X Server: {colorama.Fore.GREEN + colorama.Style.BRIGHT}Connected to {clinex_status['server_url']}{colorama.Style.RESET_ALL}
+   {colorama.Fore.WHITE}Code:    {colorama.Fore.MAGENTA + colorama.Style.BRIGHT}{clinex_status['computer_code']}{colorama.Style.RESET_ALL}"""
     
     if remote_enabled:
         banner += f"""
@@ -1536,7 +1279,7 @@ def print_startup_banner():
     
     banner += f"""
 
-{colorama.Fore.YELLOW + colorama.Style.BRIGHT}⚙️  CURRENT SETTINGS:{colorama.Style.RESET_ALL}
+{colorama.Fore.YELLOW + colorama.Style.BRIGHT}[CONFIG] CURRENT SETTINGS:{colorama.Style.RESET_ALL}
    {colorama.Fore.WHITE}Model: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{current_model.upper()}{colorama.Style.RESET_ALL}
    {colorama.Fore.WHITE}Theme: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{current_theme.capitalize()}{colorama.Style.RESET_ALL}
    {colorama.Fore.WHITE}Terminal Output: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{terminal_log_level.capitalize()}{colorama.Style.RESET_ALL}
@@ -1544,13 +1287,13 @@ def print_startup_banner():
    {colorama.Fore.WHITE}Push Notifications: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{ntfy_notification_level.capitalize()}{colorama.Style.RESET_ALL}
    {colorama.Fore.WHITE}Remote Access: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{'Enabled' if remote_enabled else 'Disabled'}{colorama.Style.RESET_ALL}
 
-{colorama.Fore.YELLOW + colorama.Style.BRIGHT}🎛️  CONTROL PANEL:{colorama.Style.RESET_ALL}
+{colorama.Fore.YELLOW + colorama.Style.BRIGHT}[PANEL] CONTROL PANEL:{colorama.Style.RESET_ALL}
    {colorama.Fore.WHITE}Open your browser and go to:{colorama.Style.RESET_ALL}
    {colorama.Fore.CYAN + colorama.Style.BRIGHT + colorama.Back.BLACK}  http://127.0.0.1:3001  {colorama.Style.RESET_ALL}
    
    {colorama.Fore.WHITE}Configure notifications, alerts, models, and more!{colorama.Style.RESET_ALL}
 
-{colorama.Fore.CYAN + colorama.Style.BRIGHT}{'═' * 62}{colorama.Style.RESET_ALL}
+{colorama.Fore.CYAN + colorama.Style.BRIGHT}{'=' * 62}{colorama.Style.RESET_ALL}
 """
     print(banner)
 
@@ -1577,6 +1320,9 @@ if __name__ == '__main__':
             logger.error(f"Failed to start ngrok: {e}")
             print(f"{colorama.Fore.RED}Failed to start ngrok. Remote access will not be available.{colorama.Style.RESET_ALL}")
             remote_enabled = False
+
+    # Start the agent automatically
+    clinex_agent_instance.start()
 
     # Print the startup banner
     print_startup_banner()

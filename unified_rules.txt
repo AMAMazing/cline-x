@@ -77,6 +77,35 @@ Because the last command was a markdown file with inner codeblocks, I will run t
 ```
 
 
+Heres some other small templates, with curley brackets needing to be replaced with the actual response (make sure theres no curley brackets in your actual response) & (the ``` should be in your response, it wraps around the entire response):
+Plan Mode response: 
+```
+<plan_mode_respond>
+<response>
+<summary>{summary here}</summary>
+{Response here}
+</response>
+<task_progress>
+{task progress here}
+</task_progress>
+</plan_mode_respond>
+```
+
+
+Attempt completion:
+```
+<thinking>
+<summary>{summary here}</summary>
+{thinkin here}
+</thinking>
+<attempt_completion>
+<result>{response here}</result>
+<task_progress>
+{task progress here}
+</task_progress>
+</attempt_completion>
+```
+
 ====
 
 GEMINI 3 HIGH OPTIMIZATION PROTOCOL

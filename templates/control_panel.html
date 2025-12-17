@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Cline-X Control Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        gray: {
+                            900: '#111',
+                            800: '#1e1e1e',
+                            700: '#2d2d2d',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #111; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #444; }
+    </style>
+</head>
+<body class="bg-[#0A0A0A] text-gray-100 min-h-screen font-sans selection:bg-blue-500/30">
+    <div class="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/5 rounded-full blur-[100px] pointer-events-none"></div>
+    <div class="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/5 rounded-full blur-[100px] pointer-events-none"></div>
+
+    <div class="relative z-10 max-w-3xl mx-auto px-6 py-12">
+        <div class="text-center mb-12">
+            <h1 class="text-5xl font-bold tracking-tight mb-3 bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
+                Cline-X
+            </h1>
+            <p class="text-gray-500 text-lg">Control Panel</p>
+        </div>
+
+        <div class="mb-10">
+            <div class="bg-[#111] border border-gray-800 rounded-2xl p-6 shadow-xl hover:border-gray-700 transition-all">
+                <h3 class="text-sm font-medium text-gray-400 mb-4 uppercase tracking-wider">🔗 Cline Link</h3>
+                <button onclick="window.location.href='/dashboard'" class="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-semibold py-3 px-6 rounded-xl transition-all shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2">
+                    Launch Dashboard
+                </button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <div class="bg-[#111] border border-gray-800 rounded-2xl p-6 shadow-xl">
+                <h3 class="text-sm font-medium text-gray-400 mb-4 uppercase tracking-wider">AI Model</h3>
+                <div class="flex gap-2 p-1 bg-gray-800/50 rounded-xl border border-gray-700/50" id="model-group">
+                    <button class="flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all {{ 'bg-gray-700 text-white shadow-sm' if current_model == 'gemini' else 'text-gray-400 hover:text-white hover:bg-gray-700/50' }} model-btn" onclick="switchModel(this, 'gemini')">🧠 Gemini</button>
+                    <button class="flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all {{ 'bg-gray-700 text-white shadow-sm' if current_model == 'deepseek' else 'text-gray-400 hover:text-white hover:bg-gray-700/50' }} model-btn" onclick="switchModel(this, 'deepseek')">🔍 DeepSeek</button>
+                    <button class="flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all {{ 'bg-gray-700 text-white shadow-sm' if current_model == 'aistudio' else 'text-gray-400 hover:text-white hover:bg-gray-700/50' }} model-btn" onclick="switchModel(this, 'aistudio')">🎨 AIStudio</button>
+                </div>
+            </div>
+
+            <div class="bg-[#111] border border-gray-800 rounded-2xl p-6 shadow-xl">
+                <h3 class="text-sm font-medium text-gray-400 mb-4 uppercase tracking-wider">Terminal Output</h3>
+                <div class="grid grid-cols-4 gap-1 p-1 bg-gray-800/50 rounded-xl border border-gray-700/50" id="log-level-group">
+                    <button class="py-2 rounded-lg text-xs font-medium transition-all {{ 'bg-gray-700 text-white shadow-sm' if terminal_log_level == 'none' else 'text-gray-400 hover:text-white hover:bg-gray-700/50' }} model-btn" onclick="setLogLevel(this, 'none')">Off</button>
+                    <button class="py-2 rounded-lg text-xs font-medium transition-all {{ 'bg-gray-700 text-white shadow-sm' if terminal_log_level == 'minimal' else 'text-gray-400 hover:text-white hover:bg-gray-700/50' }} model-btn" onclick="setLogLevel(this, 'minimal')">Min</button>
+                    <button class="py-2 rounded-lg text-xs font-medium transition-all {{ 'bg-gray-700 text-white shadow-sm' if terminal_log_level == 'default' else 'text-gray-400 hover:text-white hover:bg-gray-700/50' }} model-btn" onclick="setLogLevel(this, 'default')">Def</button>
+                    <button class="py-2 rounded-lg text-xs font-medium transition-all {{ 'bg-gray-700 text-white shadow-sm' if terminal_log_level == 'debug' else 'text-gray-400 hover:text-white hover:bg-gray-700/50' }} model-btn" onclick="setLogLevel(this, 'debug')">Dbg</button>
+                </div>
+            </div>
+
+            <div class="bg-[#111] border border-gray-800 rounded-2xl p-6 shadow-xl">
+                <h3 class="text-sm font-medium text-gray-400 mb-4 uppercase tracking-wider">Terminal Alerts</h3>
+                <div class="flex gap-2 p-1 bg-gray-800/50 rounded-xl border border-gray-700/50" id="alert-level-group">
+                    <button class="flex-1 py-2 px-2 rounded-lg text-xs font-medium transition-all {{ 'bg-gray-700 text-white shadow-sm' if terminal_alert_level == 'none' else 'text-gray-400 hover:text-white hover:bg-gray-700/50' }} model-btn" onclick="setAlertLevel(this, 'none')">None</button>
+                    <button class="flex-1 py-2 px-2 rounded-lg text-xs font-medium transition-all {{ 'bg-gray-700 text-white shadow-sm' if terminal_alert_level == 'completions' else 'text-gray-400 hover:text-white hover:bg-gray-700/50' }} model-btn" onclick="setAlertLevel(this, 'completions')">Done</button>
+                    <button class="flex-1 py-2 px-2 rounded-lg text-xs font-medium transition-all {{ 'bg-gray-700 text-white shadow-sm' if terminal_alert_level == 'all' else 'text-gray-400 hover:text-white hover:bg-gray-700/50' }} model-btn" onclick="setAlertLevel(this, 'all')">All</button>
+                </div>
+            </div>
+
+            <div class="bg-[#111] border border-gray-800 rounded-2xl p-6 shadow-xl">
+                <h3 class="text-sm font-medium text-gray-400 mb-4 uppercase tracking-wider">Push Notifications</h3>
+                <div class="flex gap-2 p-1 bg-gray-800/50 rounded-xl border border-gray-700/50 mb-4" id="ntfy-level-group">
+                    <button class="flex-1 py-2 px-2 rounded-lg text-xs font-medium transition-all {{ 'bg-gray-700 text-white shadow-sm' if ntfy_notification_level == 'none' else 'text-gray-400 hover:text-white hover:bg-gray-700/50' }} model-btn" onclick="setNtfyLevel(this, 'none')">Off</button>
+                    <button class="flex-1 py-2 px-2 rounded-lg text-xs font-medium transition-all {{ 'bg-gray-700 text-white shadow-sm' if ntfy_notification_level == 'completion' else 'text-gray-400 hover:text-white hover:bg-gray-700/50' }} model-btn" onclick="setNtfyLevel(this, 'completion')">Done</button>
+                    <button class="flex-1 py-2 px-2 rounded-lg text-xs font-medium transition-all {{ 'bg-gray-700 text-white shadow-sm' if ntfy_notification_level == 'all' else 'text-gray-400 hover:text-white hover:bg-gray-700/50' }} model-btn" onclick="setNtfyLevel(this, 'all')">All</button>
+                </div>
+                
+                {% if not config.ntfy_topic %}
+                <div id="ntfy-setup" class="text-center">
+                    <button onclick="enableNtfy()" class="text-xs bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-600/30 px-3 py-2 rounded-lg transition-colors">
+                        📲 Generate Topic Code
+                    </button>
+                </div>
+                {% endif %}
+                
+                <div id="ntfy-topic-display" class="{{ 'hidden' if not config.ntfy_topic else 'block' }}">
+                    <div class="text-xs text-gray-500 mb-1">Your ntfy topic:</div>
+                    <div class="flex items-center justify-between bg-black/30 p-2 rounded border border-gray-700">
+                        <code class="text-xs text-blue-400 font-mono break-all" id="ntfy-topic-value">{{ config.ntfy_topic }}</code>
+                        <button onclick="copyToClipboard(document.getElementById('ntfy-topic-value').innerText, this)" class="ml-2 text-gray-500 hover:text-white transition-colors p-1 rounded-md hover:bg-gray-700/50 group" title="Copy Topic">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-6 bg-[#111] border border-gray-800 rounded-2xl p-6 shadow-xl">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wider">🚀 Cline X Server</h3>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="clinexToggle" class="sr-only peer" {{ 'checked' if clinex_status.enabled else '' }} onchange="setClineX(this.checked)">
+                    <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+            </div>
+            <p class="text-xs text-gray-500 mb-4">Enable persistent remote access via clinex.dev. (Optional relay)</p>
+            
+            {% if clinex_status.enabled %}
+            <div class="space-y-3">
+                <div class="bg-gray-800/50 p-3 rounded-xl border border-gray-700/50 flex justify-between items-center">
+                    <div>
+                        <div class="text-xs text-gray-500 mb-1">Computer Code</div>
+                        <div class="font-mono text-lg text-blue-400 tracking-wide" id="computer-code">{{ clinex_status.computer_code }}</div>
+                    </div>
+                    <button onclick="copyToClipboard('{{ clinex_status.computer_code }}', this)" class="ml-2 text-gray-500 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-700/50" title="Copy Code">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="bg-gray-800/50 p-3 rounded-xl border border-gray-700/50 flex justify-between items-center">
+                    <div>
+                        <div class="text-xs text-gray-500 mb-1">Pairing Password</div>
+                        <div class="font-mono text-base text-purple-400" id="pairing-password">{{ clinex_status.pairing_password }}</div>
+                    </div>
+                    <button onclick="copyToClipboard('{{ clinex_status.pairing_password }}', this)" class="ml-2 text-gray-500 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-700/50" title="Copy Password">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="text-xs text-gray-500 mt-2">
+                    Go to <a href="{{ clinex_status.server_url }}" target="_blank" class="text-blue-400 hover:underline">{{ clinex_status.server_url }}</a> to pair.
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="mt-6 bg-[#111] border border-gray-800 rounded-2xl p-6 shadow-xl opacity-75 hover:opacity-100 transition-opacity">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wider">🌐 Ngrok Remote Access</h3>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="remoteToggle" class="sr-only peer" {{ 'checked' if remote_enabled else '' }} onchange="setRemote(this.checked)">
+                    <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                </label>
+            </div>
+            <p class="text-xs text-gray-500 mb-4">Enable temporary access via ngrok tunnel. (Can run alongside Cline X Server)</p>
+
+            {% if remote_enabled %}
+            <div class="space-y-3">
+                <div class="bg-gray-800/50 p-3 rounded-xl border border-gray-700/50 flex justify-between items-center">
+                    <div class="overflow-hidden">
+                        <div class="text-xs text-gray-500 mb-1">Public URL</div>
+                        <div class="font-mono text-sm text-green-400 break-all truncate pr-2">{{ public_url }}</div>
+                    </div>
+                    <button onclick="copyToClipboard('{{ public_url }}', this)" class="ml-2 text-gray-500 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-700/50 flex-shrink-0" title="Copy URL">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="bg-gray-800/50 p-3 rounded-xl border border-gray-700/50 flex justify-between items-center">
+                    <div class="overflow-hidden">
+                        <div class="text-xs text-gray-500 mb-1">API Key</div>
+                        <div class="font-mono text-sm text-green-400 break-all truncate pr-2">{{ api_key }}</div>
+                    </div>
+                    <button onclick="copyToClipboard('{{ api_key }}', this)" class="ml-2 text-gray-500 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-700/50 flex-shrink-0" title="Copy Key">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+    </div>
+
+    <script>
+        function getCsrfToken() {
+            return document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        }
+
+        // --- NEW COPY FUNCTION ---
+        function copyToClipboard(text, btn) {
+            navigator.clipboard.writeText(text).then(() => {
+                // Store original icon
+                const originalHtml = btn.innerHTML;
+                
+                // Switch to checkmark
+                btn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                `;
+                
+                // Revert after 2 seconds
+                setTimeout(() => {
+                    btn.innerHTML = originalHtml;
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy text: ', err);
+            });
+        }
+        // -------------------------
+
+        function updateActiveBtn(containerId, clickedBtn) {
+            const container = document.getElementById(containerId);
+            container.querySelectorAll('.model-btn').forEach(btn => {
+                btn.classList.remove('bg-gray-700', 'text-white', 'shadow-sm');
+                btn.classList.add('text-gray-400', 'hover:text-white', 'hover:bg-gray-700/50');
+            });
+            clickedBtn.classList.remove('text-gray-400', 'hover:text-white', 'hover:bg-gray-700/50');
+            clickedBtn.classList.add('bg-gray-700', 'text-white', 'shadow-sm');
+        }
+
+        function switchModel(btn, model) {
+            updateActiveBtn('model-group', btn);
+            fetch('/model', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify({'model': model})
+            });
+        }
+
+        function setLogLevel(btn, level) {
+            updateActiveBtn('log-level-group', btn);
+            fetch('/log-level', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify({'level': level})
+            }).then(() => location.reload());
+        }
+
+        function setAlertLevel(btn, level) {
+            updateActiveBtn('alert-level-group', btn);
+            fetch('/alert-level', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify({'level': level})
+            });
+        }
+
+        function setNtfyLevel(btn, level) {
+            updateActiveBtn('ntfy-level-group', btn);
+            fetch('/notifications', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify({'level': level})
+            });
+        }
+
+        function enableNtfy() {
+            fetch('/notifications/enable', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                }
+            })
+            .then(r => r.json())
+            .then(data => {
+                if(data.success) {
+                    document.getElementById('ntfy-setup').style.display = 'none';
+                    document.getElementById('ntfy-topic-display').classList.remove('hidden');
+                    document.getElementById('ntfy-topic-value').textContent = data.topic;
+                }
+            });
+        }
+
+        function setClineX(state) {
+            fetch('/clinex/toggle', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify({'enabled': state})
+            }).then(() => location.reload());
+        }
+
+        function setRemote(state) {
+            fetch('/remote', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify({'enabled': state})
+            }).then(() => location.reload());
+        }
+    </script>
+</body>
+</html>

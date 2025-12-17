@@ -1,0 +1,12 @@
+{
+    "computer_code": "262-054-002",
+    "pairing_password": "gCgiTX1tCOdQ",
+    "server_url": "http://localhost:3000",
+    "model": "aistudio",
+    "theme": "dark",
+    "ntfy_topic": "https://ntfy.sh/clinex-Ndn2_oUFdPydHoBy",
+    "ntfy_notification_level": "all",
+    "terminal_log_level": "default",
+    "terminal_alert_level": "completions",
+    "remote_enabled": "False"
+}

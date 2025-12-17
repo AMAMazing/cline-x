@@ -5,206 +5,86 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        gray: {
+                            900: '#111',
+                            800: '#1e1e1e',
+                            700: '#2d2d2d',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        /* CSS Reset & Scrollbar Fix */
-        *, *::before, *::after { box-sizing: border-box; }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #1e1e1e;
-            color: #d4d4d4;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            /* Dynamic viewport height for mobile browsers */
-            height: 100dvh; 
-            overflow: hidden;
-        }
-
-        .header {
-            background: linear-gradient(90deg, #007acc, #005a9e);
-            padding: 15px 30px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            color: white;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            flex-shrink: 0;
-            z-index: 10;
-        }
-        .header h1 { margin: 0; font-size: 20px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 50vw; }
-        .header a {
-            color: white;
-            text-decoration: none;
-            font-size: 14px;
-            padding: 8px 15px;
-            border-radius: 5px;
-            transition: background-color 0.3s;
-            background: rgba(255, 255, 255, 0.1);
-        }
-        .header a:hover { background-color: rgba(255, 255, 255, 0.25); }
-
-        .chat-container {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            max-width: 900px;
-            width: 100%;
-            margin: 0 auto;
-            padding: 20px;
-            overflow: hidden;
-            position: relative;
-        }
-
-        .messages-area {
-            flex: 1;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            padding: 20px;
-            background: #252526;
-            border: 1px solid #3e3e42;
-            border-radius: 12px;
-            margin-bottom: 20px;
-            -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
-        }
-
-        .message {
-            max-width: 80%;
-            padding: 12px 18px;
-            border-radius: 12px;
-            line-height: 1.5;
-            font-size: 15px; /* Slightly larger for readability */
-            word-wrap: break-word;
-            position: relative;
-        }
-
-        .message .timestamp {
-            font-size: 0.75em;
-            opacity: 0.7;
-            margin-bottom: 4px;
-            display: block;
-        }
-
-        .message.sent {
-            align-self: flex-end;
-            background-color: #007acc;
-            color: white;
-            border-bottom-right-radius: 2px;
-        }
-
-        .message.received {
-            align-self: flex-start;
-            background-color: #3c3c3c;
-            color: #e1e1e1;
-            border-bottom-left-radius: 2px;
-            border: 1px solid #3e3e42;
-        }
-
-        .input-area {
-            display: flex;
-            gap: 10px;
-            height: 60px;
-            flex-shrink: 0;
-        }
-
-        textarea {
-            flex: 1;
-            background: #252526;
-            border: 1px solid #3e3e42;
-            border-radius: 8px;
-            color: #e1e1e1;
-            padding: 12px;
-            font-family: inherit;
-            resize: none;
-            font-size: 16px; /* Prevents zoom on iOS inputs */
-        }
-        textarea:focus { outline: none; border-color: #007acc; }
-
-        button {
-            background: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            padding: 0 20px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: background 0.2s, transform 0.1s;
-            white-space: nowrap;
-        }
-        button:hover { background: #66bb6a; }
-        button:active { transform: scale(0.98); }
-        
-        /* Mobile Optimization */
-        @media (max-width: 768px) {
-            .header {
-                padding: 10px 15px;
-            }
-            .header h1 {
-                font-size: 16px;
-            }
-            .header a {
-                padding: 6px 10px;
-                font-size: 12px;
-            }
-            
-            .chat-container {
-                padding: 10px;
-                max-width: 100%;
-            }
-
-            .messages-area {
-                padding: 15px;
-                border-radius: 8px;
-                margin-bottom: 10px;
-            }
-
-            .message {
-                max-width: 90%;
-                padding: 10px 14px;
-                font-size: 14px;
-            }
-
-            .input-area {
-                height: 50px;
-            }
-
-            textarea {
-                padding: 10px;
-            }
-
-            button {
-                padding: 0 15px;
-            }
-        }
-        
-        /* Scrollbar */
+        /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #1e1e1e; }
-        ::-webkit-scrollbar-thumb { background: #424242; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #4f4f4f; }
+        ::-webkit-scrollbar-track { background: #111; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #444; }
+        
+        /* Mobile Height Fix */
+        .h-dvh { height: 100dvh; }
     </style>
 </head>
-<body>
-    <div class="header">
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <a href="{{ url_for('dashboard') }}">&larr;</a>
-            <h1>{{ project_name }}</h1>
-        </div>
-        <a href="{{ url_for('logout') }}">Logout</a>
-    </div>
+<body class="bg-[#0A0A0A] text-gray-100 h-dvh flex flex-col font-sans selection:bg-blue-500/30 overflow-hidden">
+    <!-- Background Gradients -->
+    <div class="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/5 rounded-full blur-[100px] pointer-events-none z-0"></div>
+    <div class="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/5 rounded-full blur-[100px] pointer-events-none z-0"></div>
 
-    <div class="chat-container">
-        <div class="messages-area" id="messages-area">
-            <!-- Messages will be populated by JS -->
+    <!-- Header -->
+    <header class="flex-shrink-0 flex justify-between items-center px-6 py-4 border-b border-gray-800 bg-[#0A0A0A]/80 backdrop-blur-md z-10">
+        <div class="flex items-center gap-4">
+            <a href="{{ url_for('dashboard') }}" class="p-2 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-white transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+            </a>
+            <div>
+                <h1 class="text-lg font-bold tracking-tight text-white truncate max-w-[60vw]">
+                    {{ project_name }}
+                </h1>
+                <p class="text-xs text-green-400 flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                    Active Session
+                </p>
+            </div>
         </div>
+    </header>
 
-        <div class="input-area">
-            <textarea id="message-input" placeholder="Message..."></textarea>
-            <button onclick="sendMessage()">Send</button>
+    <!-- Messages Area -->
+    <main class="flex-1 overflow-y-auto p-4 z-10" id="messages-area">
+        <div class="max-w-3xl mx-auto flex flex-col gap-4 min-h-full justify-end">
+            <!-- Initial System Message -->
+            <div class="flex justify-start">
+                <div class="bg-gray-800 border border-gray-700 rounded-2xl rounded-tl-none px-4 py-3 max-w-[85%]">
+                    <div class="text-xs text-gray-500 mb-1">System</div>
+                    <div class="text-sm text-gray-200">Connected to {{ project_name }}. Ready for commands.</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Input Area -->
+    <div class="flex-shrink-0 p-4 border-t border-gray-800 bg-[#0A0A0A] z-20">
+        <div class="max-w-3xl mx-auto flex gap-3">
+            <div class="relative flex-1">
+                <textarea 
+                    id="message-input" 
+                    placeholder="Type a message..." 
+                    class="w-full bg-[#1A1A1A] border border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none h-[50px] max-h-[120px] shadow-inner transition-all"
+                    rows="1"
+                ></textarea>
+            </div>
+            <button 
+                onclick="sendMessage()" 
+                class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-semibold px-6 rounded-xl transition-all shadow-lg shadow-blue-900/20 flex items-center justify-center hover:scale-105 active:scale-95 h-[50px]"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+            </button>
         </div>
     </div>
 
@@ -212,43 +92,56 @@
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
         const messagesArea = document.getElementById('messages-area');
         const messageInput = document.getElementById('message-input');
+        const messagesContainer = messagesArea.firstElementChild;
         
         let lastMessageCount = 0;
 
-        function renderMessages(messages) {
-            // Only update DOM if message count changed to avoid flickering
-            // In a real app we'd use IDs, but this works for simple append-only lists
-            if (messages.length === lastMessageCount) return;
+        function scrollToBottom() {
+            messagesArea.scrollTop = messagesArea.scrollHeight;
+        }
+
+        function createMessageElement(msg, isUser) {
+            const div = document.createElement('div');
+            div.className = `flex ${isUser ? 'justify-end' : 'justify-start'}`;
             
+            const bubble = document.createElement('div');
+            // Tailwind classes for message bubbles
+            bubble.className = isUser 
+                ? 'bg-gradient-to-br from-blue-600 to-purple-600 text-white rounded-2xl rounded-tr-none px-4 py-3 max-w-[85%] shadow-md'
+                : 'bg-gray-800 border border-gray-700 text-gray-200 rounded-2xl rounded-tl-none px-4 py-3 max-w-[85%] shadow-sm';
+            
+            const meta = document.createElement('div');
+            meta.className = `text-[10px] mb-1 ${isUser ? 'text-blue-200' : 'text-gray-500'}`;
+            meta.textContent = isUser ? 'You \u2022 ' + (msg.time || '') : 'Assistant \u2022 ' + (msg.time || '');
+            
+            const content = document.createElement('div');
+            content.className = 'text-sm whitespace-pre-wrap leading-relaxed';
+            content.textContent = msg.text;
+            
+            bubble.appendChild(meta);
+            bubble.appendChild(content);
+            div.appendChild(bubble);
+            return div;
+        }
+
+        function renderMessages(messages) {
+            if (messages.length === lastMessageCount) return;
             lastMessageCount = messages.length;
-            messagesArea.innerHTML = ''; // Clear current view
+            
+            // Clear and Rebuild (Simple approach for consistency)
+            messagesContainer.innerHTML = '';
             
             if (messages.length === 0) {
-                const div = document.createElement('div');
-                div.className = 'message received';
-                div.textContent = "Connected to {{ project_name }}. Ready for commands.";
-                messagesArea.appendChild(div);
+                 const div = createMessageElement({text: "Connected to {{ project_name }}. Ready for commands.", time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}, false);
+                 messagesContainer.appendChild(div);
             } else {
                 messages.forEach(msg => {
-                    const div = document.createElement('div');
-                    // role 'user' -> sent, 'system' -> received
-                    div.className = 'message ' + (msg.role === 'user' ? 'sent' : 'received');
-                    
-                    const timeSpan = document.createElement('span');
-                    timeSpan.className = 'timestamp';
-                    timeSpan.textContent = msg.time || '';
-                    
-                    const textSpan = document.createElement('div');
-                    textSpan.textContent = msg.text;
-                    
-                    div.appendChild(timeSpan);
-                    div.appendChild(textSpan);
-                    messagesArea.appendChild(div);
+                    const isUser = msg.role === 'user';
+                    const div = createMessageElement(msg, isUser);
+                    messagesContainer.appendChild(div);
                 });
             }
-            
-            // Auto scroll to bottom
-            messagesArea.scrollTop = messagesArea.scrollHeight;
+            scrollToBottom();
         }
 
         async function fetchMessages() {
@@ -267,23 +160,17 @@
             const text = messageInput.value.trim();
             if (!text) return;
 
-            // Clear input immediately for better UX
             messageInput.value = '';
+            messageInput.style.height = 'auto'; // Reset height
             
-            // Optimistically append message (will be corrected by next poll)
-            // We do this so the UI feels responsive
+            // Optimistic UI
             const pendingMsg = {
                 role: 'user',
                 text: text,
                 time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
             };
-            
-            // Create a temp view update
-            const div = document.createElement('div');
-            div.className = 'message sent';
-            div.innerHTML = `<span class="timestamp">${pendingMsg.time}</span><div>${pendingMsg.text}</div>`;
-            messagesArea.appendChild(div);
-            messagesArea.scrollTop = messagesArea.scrollHeight;
+            messagesContainer.appendChild(createMessageElement(pendingMsg, true));
+            scrollToBottom();
 
             try {
                 const response = await fetch('/send_message', {
@@ -292,13 +179,8 @@
                     body: JSON.stringify({ message: text }),
                 });
                 
-                const data = await response.json();
-                
-                if (data.status === 'success') {
-                    // Force a poll to sync state
+                if ((await response.json()).status === 'success') {
                     fetchMessages();
-                } else {
-                    alert("Error: " + data.message);
                 }
             } catch (error) {
                 console.error(error);
@@ -306,7 +188,13 @@
             }
         }
 
-        // Send on Enter (without shift)
+        // Auto-resize textarea
+        messageInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = (this.scrollHeight) + 'px';
+        });
+
+        // Send on Enter
         messageInput.addEventListener('keydown', function(e) {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -314,14 +202,15 @@
             }
         });
         
-        // Focus input on load for desktop
-        if (window.innerWidth > 768) {
-            messageInput.focus();
-        }
+        // Focus input
+        if (window.innerWidth > 768) messageInput.focus();
 
-        // Start Polling
-        fetchMessages(); // Initial fetch
-        setInterval(fetchMessages, 2000); // Poll every 2 seconds
+        // Poll
+        fetchMessages();
+        setInterval(fetchMessages, 2000);
+        
+        // Initial scroll
+        setTimeout(scrollToBottom, 100);
     </script>
 </body>
 </html>
