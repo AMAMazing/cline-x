@@ -65,7 +65,7 @@ Switch between models instantly through the web interface!
 
 5. **Run the server**
    ```bash
-   python app.py
+   python main.py
    ```
 
 6. **Open the control panel**
@@ -73,7 +73,7 @@ Switch between models instantly through the web interface!
 
 ### 📦 Using the Pre-built Executable
 
-If you prefer not to set up Python, download the pre-built executable from the [Releases](../../releases) section. Simply extract and run `cline-x.exe`!
+If you prefer not to set up Python, download the pre-built executable from the [Releases](../../releases) section. Simply extract and run `Cline-X.exe`!
 
 ## 📖 Usage
 
@@ -112,16 +112,19 @@ If you prefer not to set up Python, download the pre-built executable from the [
 
 ## 🔧 Configuration
 
-Settings are stored in `config.txt` and persist across restarts:
+Settings are stored in `clinex_config.json` (formerly `config.txt`) and persist across restarts:
 
-```
-model = "gemini"
-theme = "dark"
-ntfy_topic = ""
-ntfy_notification_level = "none"
-terminal_log_level = "default"
-terminal_alert_level = "none"
-remote_enabled = "False"
+```json
+{
+  "model": "gemini",
+  "theme": "dark",
+  "ntfy_topic": "",
+  "ntfy_notification_level": "none",
+  "terminal_log_level": "default",
+  "terminal_alert_level": "none",
+  "tunnel_active": "False",
+  "auth_required": "False"
+}
 ```
 
 ## 🎨 Terminal Alerts
@@ -136,19 +139,24 @@ When enabled, Cline-X displays beautiful ASCII art notifications in your termina
 
 - API key authentication for remote access
 - Secure ngrok tunneling
-- Rate limiting on requests (5-second minimum interval)
+- Rate limiting on requests (Default: 20 per minute for chat, 5 per minute for toggles)
 - Environment-based credential storage
+- CSRF Protection enabled
 
 ## 🛠️ Development
 
 ### Key Dependencies
-- Flask - Web framework
-- pyngrok - ngrok integration
-- pyautogui - GUI automation
-- win32clipboard - Clipboard access
-- colorama - Terminal colors
-- requests - HTTP client
-- python-dotenv - Environment management
+- **Flask** & **Flask-WTF** - Web framework & Security
+- **Flask-Limiter** - API Rate limiting
+- **pyngrok** - ngrok integration for remote access
+- **talktollm** - Multi-model AI interface
+- **optimisewait** - Window focus & automation optimization
+- **pyautogui** & **pygetwindow** - GUI automation
+- **win32clipboard** - Windows clipboard access
+- **Pillow** - Image processing
+- **colorama** - Terminal colors
+- **requests** - HTTP client
+- **python-dotenv** - Environment management
 
 ## 📝 License
 
@@ -169,3 +177,4 @@ If you find Cline-X useful, please consider giving it a star on GitHub!
 ---
 
 **Built with ❤️ for the Cline community**
+
