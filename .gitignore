@@ -21,8 +21,6 @@ coverage/
 config.txt
 build.bat
 .venv
-cline-x.exe
-
-ignored_folders.json
 .next/
-clinex-config.json
+*.json
+clinex_config.json

@@ -104,8 +104,8 @@ def read_config():
         'ntfy_notification_level': 'none',
         'terminal_log_level': 'default',
         'terminal_alert_level': 'none',
-        'remote_enabled': 'False',
-        'server_url': 'http://localhost:3000' 
+        'tunnel_active': 'False',
+        'auth_required': 'False'
     }
     
     for k, v in defaults.items():
@@ -140,7 +140,8 @@ current_theme = config.get('theme', 'dark')
 ntfy_notification_level = config.get('ntfy_notification_level', 'none')
 terminal_log_level = config.get('terminal_log_level', 'default')
 terminal_alert_level = config.get('terminal_alert_level', 'none')
-remote_enabled = str(config.get('remote_enabled', 'False')).lower() == 'true'
+tunnel_active = str(config.get('tunnel_active', 'False')).lower() == 'true'
+auth_required = str(config.get('auth_required', 'False')).lower() == 'true'
 
 # --- LOGGING SETUP ---
 class CustomFormatter(logging.Formatter):
@@ -174,191 +175,6 @@ logger = logging.getLogger(__name__)
 logger.addHandler(handler)
 logger.setLevel(logging.DEBUG if terminal_log_level == 'debug' else logging.INFO)
 
-# --- CLINE X AGENT CLASS (Merged) ---
-class ClineXAgent:
-    def __init__(self, config_path=None, server_url='http://localhost:3000'):
-        # Use main config path if not specified
-        self.config_path = config_path if config_path else os.path.join(APP_PATH, 'clinex_config.json')
-        self.server_url = server_url
-        self.computer_code = None
-        self.pairing_password = None
-        self.is_connected = False
-        self.stop_event = threading.Event()
-        self.thread = None
-        
-        # Load or generate identity
-        self.load_identity()
-
-    def generate_code(self):
-        """Generates a 9-digit numeric code formatted as XXX-XXX-XXX."""
-        nums = ''.join(secrets.choice(string.digits) for _ in range(9))
-        return f"{nums[:3]}-{nums[3:6]}-{nums[6:]}"
-
-    def generate_password(self):
-        """Generates a secure random password."""
-        chars = string.ascii_letters + string.digits
-        return ''.join(secrets.choice(chars) for _ in range(12))
-
-    def load_identity(self):
-        """Loads identity from disk or generates a new one."""
-        print(f"DEBUG: Checking for config at {self.config_path}")
-        if os.path.exists(self.config_path):
-            try:
-                with open(self.config_path, 'r') as f:
-                    data = json.load(f)
-                    self.computer_code = data.get('computer_code')
-                    self.pairing_password = data.get('pairing_password')
-                    # Prioritize config file if exists
-                    if data.get('server_url'):
-                        self.server_url = data.get('server_url')
-                    
-                    print(f"DEBUG: Loaded configuration. Server URL: {self.server_url}")
-            except Exception as e:
-                print(f"ERROR: Failed to load clinex config: {e}")
-                logger.error(f"Failed to load clinex config: {e}")
-        else:
-            print(f"DEBUG: No config file found. Using default: {self.server_url}")
-
-        # Generate if missing
-        if not self.computer_code:
-            self.computer_code = self.generate_code()
-            self.pairing_password = self.generate_password()
-            self.save_identity()
-            
-    def save_identity(self):
-        """Saves current identity to disk."""
-        # We now merge identity into the main config object to avoid overwriting user settings
-        global config
-        config['computer_code'] = self.computer_code
-        config['pairing_password'] = self.pairing_password
-        config['server_url'] = self.server_url
-        write_config(config)
-
-    def start(self):
-        """Starts the connection agent in a background thread."""
-        if self.thread and self.thread.is_alive():
-            return
-        
-        self.stop_event.clear()
-        self.thread = threading.Thread(target=self._run_loop, daemon=True)
-        self.thread.start()
-        logger.info(f"Cline X Sync Agent started. Computer Code: {self.computer_code}")
-
-    def stop(self):
-        """Stops the connection agent."""
-        self.stop_event.set()
-        if self.thread:
-            self.thread.join(timeout=2.0)
-        self.is_connected = False
-        logger.info("Cline X Sync Agent stopped.")
-
-    def _run_loop(self):
-        """
-        Main loop for the agent.
-        Polls the server for jobs and executes them locally.
-        """
-        logger.info(f"Connecting to {self.server_url}...")
-        
-        target_server = self.server_url
-        
-        while not self.stop_event.is_set():
-            try:
-                # 1. POLL
-                response = requests.get(f"{target_server}/api/relay?action=poll", timeout=10)
-                
-                if response.status_code == 200:
-                    self.is_connected = True
-                    data = response.json()
-                    
-                    if data.get('pending') and data.get('job'):
-                        job = data['job']
-                        logger.debug(f"Received job: {job['id']} {job['method']} {job['path']}")
-                        
-                        # 2. EXECUTE LOCAL
-                        # Local Flask app is on 3001
-                        local_url = f"http://127.0.0.1:3001{job['path']}"
-                        
-                        try:
-                            # Pass cookies if available (fixing session persistence)
-                            headers = job.get('headers', {})
-                            # Filter headers to avoid Host mismatch issues, but KEEP Cookie
-                            safe_headers = {}
-                            if 'Cookie' in headers:
-                                safe_headers['Cookie'] = headers['Cookie']
-                            if 'Content-Type' in headers:
-                                safe_headers['Content-Type'] = headers['Content-Type']
-                            
-                            # Forward the method and body if any
-                            local_res = requests.request(
-                                method=job['method'],
-                                url=local_url,
-                                headers=safe_headers,
-                                json=job.get('body'), # or data= if strictly raw
-                                timeout=10
-                            )
-                            
-                            result_status = local_res.status_code
-                            result_headers = dict(local_res.headers)
-                            
-                            # Handle Binary vs Text (Fix for Images)
-                            is_base64 = False
-                            content_type = result_headers.get('Content-Type', '').lower()
-                            
-                            if 'image' in content_type or 'octet-stream' in content_type or 'pdf' in content_type:
-                                result_body = base64.b64encode(local_res.content).decode('utf-8')
-                                is_base64 = True
-                            else:
-                                try:
-                                    result_body = local_res.text
-                                except UnicodeDecodeError:
-                                    # Fallback for unknown binary types
-                                    result_body = base64.b64encode(local_res.content).decode('utf-8')
-                                    is_base64 = True
-                            
-                        except Exception as e:
-                            logger.error(f"Local execution failed: {e}")
-                            result_body = f"Agent Error: {str(e)}"
-                            result_status = 500
-                            result_headers = {}
-                            is_base64 = False
-
-                        # 3. RESPOND
-                        requests.post(
-                            f"{target_server}/api/relay?action=complete",
-                            json={
-                                'id': job['id'],
-                                'status': result_status,
-                                'headers': result_headers,
-                                'body': result_body,
-                                'isBase64': is_base64
-                            },
-                            timeout=10
-                        )
-                    else:
-                        # No work, sleep briefly
-                        time.sleep(1)
-                else:
-                    self.is_connected = False
-                    logger.warning(f"Server returned {response.status_code}")
-                    time.sleep(5)
-                    
-            except Exception as e:
-                self.is_connected = False
-                # logger.error(f"Connection error: {e}")
-                time.sleep(5) # Retry delay
-
-    def get_status(self):
-        return {
-            'enabled': self.thread is not None and self.thread.is_alive(),
-            'connected': self.is_connected,
-            'computer_code': self.computer_code,
-            'pairing_password': self.pairing_password,
-            'server_url': self.server_url
-        }
-
-# Instantiate global agent
-clinex_agent_instance = ClineXAgent()
-
 # --- State for clearing the alert ---
 alert_lines_printed = 0
 alert_active = False
@@ -374,16 +190,25 @@ def add_chat_message(role, text):
     if len(chat_history) > MAX_CHAT_HISTORY:
         chat_history.pop(0)
 
-# --- API Key (only used when remote is enabled) ---
+# --- API Key (only used when auth_required is True) ---
 API_KEY = secrets.token_urlsafe(32)
 
 def require_api_key(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        if not remote_enabled:
+        # Check if Auth is required in config
+        current_auth_required = str(config.get('auth_required', 'False')).lower() == 'true'
+        if not current_auth_required:
             return func(*args, **kwargs)
+            
+        # 1. Check Header
         if request.headers.get('X-API-Key') == API_KEY or request.headers.get('Authorization', '').replace('Bearer ', '') == API_KEY:
             return func(*args, **kwargs)
+            
+        # 2. Check Query String (Magic Link)
+        if request.args.get('api_key') == API_KEY:
+             return func(*args, **kwargs)
+             
         abort(401, description="Invalid or missing API key")
     return wrapper
 
@@ -506,7 +331,7 @@ def get_vscode_projects():
         cleaned_paths = []
         for uri in project_uris:
             if uri.startswith('file:///'):
-                path = unquote(uri[8:]).replace('/', '\\\\')
+                path = unquote(uri[8:]).replace('/', '\\')
                 cleaned_paths.append(path)
         folder_paths = [p for p in cleaned_paths if os.path.isdir(p)]
         return sorted(folder_paths, key=lambda p: os.path.getmtime(p) if os.path.exists(p) else 0, reverse=True)
@@ -780,7 +605,6 @@ def home():
     logger.debug(f"GET request to / from {request.remote_addr}")
     
     # Gather context for the control panel template
-    clinex_status = clinex_agent_instance.get_status()
     public_url = ngrok_tunnel.public_url if 'ngrok_tunnel' in globals() else 'Starting...'
     
     return render_template('control_panel.html',
@@ -789,8 +613,8 @@ def home():
                            terminal_alert_level=terminal_alert_level,
                            ntfy_notification_level=ntfy_notification_level,
                            config=config,
-                           clinex_status=clinex_status,
-                           remote_enabled=remote_enabled,
+                           tunnel_active=tunnel_active,
+                           auth_required=auth_required,
                            public_url=public_url,
                            api_key=API_KEY)
 
@@ -902,29 +726,10 @@ def set_alert_level():
         logger.error(f"Error setting alert level: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/clinex/toggle', methods=['POST'])
+@app.route('/remote/tunnel', methods=['POST'])
 @limiter.limit("5 per minute")
-def toggle_clinex():
-    try:
-        data = request.get_json()
-        if data is None or 'enabled' not in data:
-            return jsonify({'success': False, 'error': 'Invalid request'}), 400
-
-        new_state = data['enabled']
-        if new_state:
-            clinex_agent_instance.start()
-        else:
-            clinex_agent_instance.stop()
-            
-        return jsonify({'success': True, 'enabled': new_state})
-    except Exception as e:
-        logger.error(f"Error toggling Cline X: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/remote', methods=['POST'])
-@limiter.limit("5 per minute")
-def toggle_remote():
-    global remote_enabled, config, ngrok_tunnel
+def toggle_tunnel():
+    global tunnel_active, config, ngrok_tunnel
     try:
         data = request.get_json()
         if data is None or 'enabled' not in data:
@@ -932,8 +737,8 @@ def toggle_remote():
 
         new_state = data['enabled']
         
-        if new_state and not remote_enabled:
-            # Enabling remote - start ngrok
+        if new_state and not tunnel_active:
+            # Enabling tunnel - start ngrok
             ngrok_authtoken = os.getenv("NGROK_AUTHTOKEN")
             if not ngrok_authtoken:
                 return jsonify({'success': False, 'error': 'NGROK_AUTHTOKEN not found in .env'}), 400
@@ -941,36 +746,85 @@ def toggle_remote():
             try:
                 ngrok.set_auth_token(ngrok_authtoken)
                 ngrok_tunnel = ngrok.connect(3001)
-                remote_enabled = True
+                tunnel_active = True
                 logger.info(f"ngrok tunnel established: {ngrok_tunnel.public_url}")
+                
+                # Send ntfy notification
+                ntfy_topic = config.get('ntfy_topic', '')
+                if ntfy_topic:
+                    public_url = ngrok_tunnel.public_url
+                    current_auth = str(config.get('auth_required', 'False')).lower() == 'true'
+                    if current_auth:
+                        # Append Magic Link query param
+                        public_url += f"/?api_key={API_KEY}"
+                        
+                    send_ntfy_notification(
+                        topic=ntfy_topic,
+                        simple_title="Cline-X: Remote Tunnel Active",
+                        full_content=f"Your remote access tunnel is ready: {public_url}",
+                        tags="rocket"
+                    )
+
             except Exception as e:
                 logger.error(f"Failed to start ngrok: {e}")
                 return jsonify({'success': False, 'error': f'Failed to start ngrok: {str(e)}'}), 500
                 
-        elif not new_state and remote_enabled:
-            # Disabling remote - stop ngrok
+        elif not new_state and tunnel_active:
+            # Disabling tunnel - stop ngrok
             try:
                 if 'ngrok_tunnel' in globals():
                     ngrok.disconnect(ngrok_tunnel.public_url)
-                remote_enabled = False
+                tunnel_active = False
                 logger.info("ngrok tunnel disconnected")
             except Exception as e:
                 logger.error(f"Failed to stop ngrok: {e}")
                 # Continue anyway since we're disabling
-                remote_enabled = False
+                tunnel_active = False
         
-        config['remote_enabled'] = str(remote_enabled)
+        config['tunnel_active'] = str(tunnel_active)
         write_config(config)
         
-        response_data = {'success': True, 'enabled': remote_enabled}
-        if remote_enabled and 'ngrok_tunnel' in globals():
+        response_data = {'success': True, 'enabled': tunnel_active}
+        if tunnel_active and 'ngrok_tunnel' in globals():
             response_data['public_url'] = ngrok_tunnel.public_url
             response_data['api_key'] = API_KEY
         
         return jsonify(response_data)
         
     except Exception as e:
-        logger.error(f"Error toggling remote: {str(e)}")
+        logger.error(f"Error toggling tunnel: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/remote/auth', methods=['POST'])
+@limiter.limit("5 per minute")
+def toggle_auth():
+    global auth_required, config
+    try:
+        data = request.get_json()
+        if data is None or 'enabled' not in data:
+            return jsonify({'success': False, 'error': 'Invalid request'}), 400
+
+        new_state = data['enabled']
+        auth_required = new_state
+        config['auth_required'] = str(auth_required)
+        write_config(config)
+        
+        if auth_required:
+             # Send ntfy notification with API Key
+            ntfy_topic = config.get('ntfy_topic', '')
+            if ntfy_topic:
+                send_ntfy_notification(
+                    topic=ntfy_topic,
+                    simple_title="Cline-X: Auth Enabled",
+                    full_content=f"Security enabled. Your API Key is: {API_KEY}",
+                    tags="lock"
+                )
+        
+        logger.info(f"Auth requirement set to: {auth_required}")
+        return jsonify({'success': True, 'enabled': auth_required, 'api_key': API_KEY})
+        
+    except Exception as e:
+        logger.error(f"Error toggling auth: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/theme', methods=['POST'])
@@ -1258,23 +1112,19 @@ def print_startup_banner():
     """Print a nice startup banner with all the important information"""
     colorama.init(autoreset=True)
     
-    clinex_status = clinex_agent_instance.get_status()
-
     # Replaced emojis with ASCII tags for Windows compatibility
     banner = f"""
 {bannertop}
 
 {colorama.Fore.YELLOW + colorama.Style.BRIGHT}[INFO] SERVER INFORMATION:{colorama.Style.RESET_ALL}
    {colorama.Fore.WHITE}Local:  {colorama.Fore.CYAN + colorama.Style.BRIGHT}http://127.0.0.1:3001{colorama.Style.RESET_ALL}"""
-
-    if clinex_status['enabled']:
-        banner += f"""
-   {colorama.Fore.WHITE}Cline X Server: {colorama.Fore.GREEN + colorama.Style.BRIGHT}Connected to {clinex_status['server_url']}{colorama.Style.RESET_ALL}
-   {colorama.Fore.WHITE}Code:    {colorama.Fore.MAGENTA + colorama.Style.BRIGHT}{clinex_status['computer_code']}{colorama.Style.RESET_ALL}"""
     
-    if remote_enabled:
+    if tunnel_active:
         banner += f"""
-   {colorama.Fore.WHITE}Remote: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{ngrok_tunnel.public_url if 'ngrok_tunnel' in globals() else 'Starting...'}{colorama.Style.RESET_ALL}
+   {colorama.Fore.WHITE}Remote: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{ngrok_tunnel.public_url if 'ngrok_tunnel' in globals() else 'Starting...'}{colorama.Style.RESET_ALL}"""
+    
+    if auth_required:
+        banner += f"""
    {colorama.Fore.WHITE}API Key: {colorama.Fore.MAGENTA + colorama.Style.BRIGHT}{API_KEY}{colorama.Style.RESET_ALL}"""
     
     banner += f"""
@@ -1285,7 +1135,8 @@ def print_startup_banner():
    {colorama.Fore.WHITE}Terminal Output: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{terminal_log_level.capitalize()}{colorama.Style.RESET_ALL}
    {colorama.Fore.WHITE}Terminal Alerts: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{terminal_alert_level.capitalize()}{colorama.Style.RESET_ALL}
    {colorama.Fore.WHITE}Push Notifications: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{ntfy_notification_level.capitalize()}{colorama.Style.RESET_ALL}
-   {colorama.Fore.WHITE}Remote Access: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{'Enabled' if remote_enabled else 'Disabled'}{colorama.Style.RESET_ALL}
+   {colorama.Fore.WHITE}Remote Tunnel: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{'Active' if tunnel_active else 'Inactive'}{colorama.Style.RESET_ALL}
+   {colorama.Fore.WHITE}Security Auth: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{'Required' if auth_required else 'Optional'}{colorama.Style.RESET_ALL}
 
 {colorama.Fore.YELLOW + colorama.Style.BRIGHT}[PANEL] CONTROL PANEL:{colorama.Style.RESET_ALL}
    {colorama.Fore.WHITE}Open your browser and go to:{colorama.Style.RESET_ALL}
@@ -1301,7 +1152,7 @@ if __name__ == '__main__':
     colorama.init(autoreset=True)
 
     # Handle ngrok setup if remote is enabled
-    if remote_enabled:
+    if tunnel_active:
         ngrok_authtoken = os.getenv("NGROK_AUTHTOKEN")
         if not ngrok_authtoken:
             print(f"{colorama.Fore.RED}NGROK_AUTHTOKEN not found in .env file.{colorama.Style.RESET_ALL}")
@@ -1319,10 +1170,7 @@ if __name__ == '__main__':
         except Exception as e:
             logger.error(f"Failed to start ngrok: {e}")
             print(f"{colorama.Fore.RED}Failed to start ngrok. Remote access will not be available.{colorama.Style.RESET_ALL}")
-            remote_enabled = False
-
-    # Start the agent automatically
-    clinex_agent_instance.start()
+            tunnel_active = False
 
     # Print the startup banner
     print_startup_banner()

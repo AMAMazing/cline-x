@@ -91,7 +91,7 @@
                 {% if not config.ntfy_topic %}
                 <div id="ntfy-setup" class="text-center">
                     <button onclick="enableNtfy()" class="text-xs bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-600/30 px-3 py-2 rounded-lg transition-colors">
-                        📲 Generate Topic Code
+                        ✨ Generate Topic Code
                     </button>
                 </div>
                 {% endif %}
@@ -110,59 +110,45 @@
             </div>
         </div>
 
-        <div class="mt-6 bg-[#111] border border-gray-800 rounded-2xl p-6 shadow-xl">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wider">🚀 Cline X Server</h3>
-                <label class="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" id="clinexToggle" class="sr-only peer" {{ 'checked' if clinex_status.enabled else '' }} onchange="setClineX(this.checked)">
-                    <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                </label>
-            </div>
-            <p class="text-xs text-gray-500 mb-4">Enable persistent remote access via clinex.dev. (Optional relay)</p>
-            
-            {% if clinex_status.enabled %}
-            <div class="space-y-3">
-                <div class="bg-gray-800/50 p-3 rounded-xl border border-gray-700/50 flex justify-between items-center">
-                    <div>
-                        <div class="text-xs text-gray-500 mb-1">Computer Code</div>
-                        <div class="font-mono text-lg text-blue-400 tracking-wide" id="computer-code">{{ clinex_status.computer_code }}</div>
-                    </div>
-                    <button onclick="copyToClipboard('{{ clinex_status.computer_code }}', this)" class="ml-2 text-gray-500 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-700/50" title="Copy Code">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                        </svg>
-                    </button>
-                </div>
-                <div class="bg-gray-800/50 p-3 rounded-xl border border-gray-700/50 flex justify-between items-center">
-                    <div>
-                        <div class="text-xs text-gray-500 mb-1">Pairing Password</div>
-                        <div class="font-mono text-base text-purple-400" id="pairing-password">{{ clinex_status.pairing_password }}</div>
-                    </div>
-                    <button onclick="copyToClipboard('{{ clinex_status.pairing_password }}', this)" class="ml-2 text-gray-500 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-700/50" title="Copy Password">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                        </svg>
-                    </button>
-                </div>
-                <div class="text-xs text-gray-500 mt-2">
-                    Go to <a href="{{ clinex_status.server_url }}" target="_blank" class="text-blue-400 hover:underline">{{ clinex_status.server_url }}</a> to pair.
-                </div>
-            </div>
-            {% endif %}
-        </div>
-
         <div class="mt-6 bg-[#111] border border-gray-800 rounded-2xl p-6 shadow-xl opacity-75 hover:opacity-100 transition-opacity">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wider">🌐 Ngrok Remote Access</h3>
+            <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wider mb-6">🌐 Remote Access</h3>
+            
+            <!-- Tunnel Toggle -->
+            <div class="flex justify-between items-center mb-6 border-b border-gray-800/50 pb-6">
+                <div>
+                    <div class="font-medium text-sm text-gray-300">Remote Tunnel (Ngrok)</div>
+                    <div class="text-xs text-gray-500">Enable public access via ngrok</div>
+                </div>
                 <label class="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" id="remoteToggle" class="sr-only peer" {{ 'checked' if remote_enabled else '' }} onchange="setRemote(this.checked)">
+                    <input type="checkbox" id="tunnelToggle" class="sr-only peer" {{ 'checked' if tunnel_active else '' }} onchange="setTunnel(this.checked)">
                     <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
                 </label>
             </div>
-            <p class="text-xs text-gray-500 mb-4">Enable temporary access via ngrok tunnel. (Can run alongside Cline X Server)</p>
 
-            {% if remote_enabled %}
-            <div class="space-y-3">
+            <!-- Auth Toggle -->
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <div class="font-medium text-sm text-gray-300">Security Auth</div>
+                    <div class="text-xs text-gray-500">Require API Key for access</div>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="authToggle" class="sr-only peer" {{ 'checked' if auth_required else '' }} onchange="setAuth(this.checked)">
+                    <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                </label>
+            </div>
+            
+            <!-- NGROK TOKEN INPUT -->
+            <div class="mb-4">
+                <div class="text-xs text-gray-500 mb-1">Ngrok Authtoken (Required)</div>
+                <div class="flex gap-2">
+                    <input type="password" id="ngrokToken" placeholder="Enter your ngrok authtoken" value="{{ config.get('ngrok_obfuscated', '') }}" class="flex-1 bg-gray-800/50 border border-gray-700/50 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 placeholder-gray-600">
+                    <button onclick="saveNgrokToken()" class="bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-600/30 px-3 py-2 rounded-lg text-xs transition-colors whitespace-nowrap">Save Token</button>
+                </div>
+                <p class="text-[10px] text-gray-600 mt-1">Get your token from <a href="https://dashboard.ngrok.com/get-started/your-authtoken" target="_blank" class="text-blue-500 hover:underline">ngrok.com</a></p>
+            </div>
+
+            {% if tunnel_active %}
+            <div class="space-y-3 mt-4 border-t border-gray-800/50 pt-4">
                 <div class="bg-gray-800/50 p-3 rounded-xl border border-gray-700/50 flex justify-between items-center">
                     <div class="overflow-hidden">
                         <div class="text-xs text-gray-500 mb-1">Public URL</div>
@@ -174,10 +160,15 @@
                         </svg>
                     </button>
                 </div>
+            </div>
+            {% endif %}
+
+            {% if auth_required %}
+            <div class="space-y-3 mt-3">
                 <div class="bg-gray-800/50 p-3 rounded-xl border border-gray-700/50 flex justify-between items-center">
                     <div class="overflow-hidden">
                         <div class="text-xs text-gray-500 mb-1">API Key</div>
-                        <div class="font-mono text-sm text-green-400 break-all truncate pr-2">{{ api_key }}</div>
+                        <div class="font-mono text-sm text-purple-400 break-all truncate pr-2">{{ api_key }}</div>
                     </div>
                     <button onclick="copyToClipboard('{{ api_key }}', this)" class="ml-2 text-gray-500 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-700/50 flex-shrink-0" title="Copy Key">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -295,26 +286,79 @@
             });
         }
 
-        function setClineX(state) {
-            fetch('/clinex/toggle', {
+        function setTunnel(state) {
+            fetch('/remote/tunnel', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': getCsrfToken()
                 },
                 body: JSON.stringify({'enabled': state})
-            }).then(() => location.reload());
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) {
+                    document.getElementById('tunnelToggle').checked = !state;
+                    alert("Failed to toggle tunnel: " + data.error);
+                } else {
+                    location.reload();
+                }
+            })
+            .catch(e => {
+                document.getElementById('tunnelToggle').checked = !state;
+                alert("Error: " + e);
+            });
         }
 
-        function setRemote(state) {
-            fetch('/remote', {
+        function setAuth(state) {
+            fetch('/remote/auth', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': getCsrfToken()
                 },
                 body: JSON.stringify({'enabled': state})
-            }).then(() => location.reload());
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) {
+                    document.getElementById('authToggle').checked = !state;
+                    alert("Failed to toggle auth: " + data.error);
+                } else {
+                    location.reload();
+                }
+            })
+            .catch(e => {
+                document.getElementById('authToggle').checked = !state;
+                alert("Error: " + e);
+            });
+        }
+
+        function saveNgrokToken() {
+            const token = document.getElementById('ngrokToken').value.trim();
+            if (!token) {
+                alert("Please enter a token.");
+                return;
+            }
+
+            fetch('/ngrok/token', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify({'token': token})
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    alert("Token saved successfully!");
+                    // Optional: reload or update UI
+                } else {
+                    alert("Failed to save token: " + data.error);
+                }
+            })
+            .catch(e => alert("Error saving token: " + e));
         }
     </script>
 </body>
