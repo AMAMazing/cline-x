@@ -88,6 +88,43 @@
         </div>
     </div>
 
+    <!-- Live Screen View Elements -->
+    
+    <!-- Floating Trigger Button -->
+    <button 
+        onclick="toggleScreenView()"
+        class="fixed bottom-24 right-6 w-12 h-12 bg-gray-800 hover:bg-gray-700 text-white rounded-full shadow-lg border border-gray-600 flex items-center justify-center z-50 transition-all hover:scale-110 active:scale-95 group"
+        title="View Desktop"
+    >
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover:text-blue-400 transition-colors">
+            <rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>
+        </svg>
+    </button>
+
+    <!-- Modal Overlay -->
+    <div id="screen-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] hidden flex items-center justify-center p-4">
+        <div class="relative w-full max-w-[90vw] h-[80vh] bg-[#111] border border-gray-700 rounded-2xl overflow-hidden shadow-2xl flex flex-col animate-in fade-in zoom-in duration-200">
+            <!-- Modal Header -->
+            <div class="flex justify-between items-center px-4 py-3 border-b border-gray-800 bg-[#0A0A0A]">
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                    <span class="text-sm font-medium text-gray-300">Live Desktop View</span>
+                </div>
+                <button onclick="toggleScreenView()" class="p-1 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
+            </div>
+            
+            <!-- Modal Content (Image) -->
+            <div class="flex-1 bg-black flex items-center justify-center overflow-hidden relative group">
+                 <img id="screen-img" class="max-w-full max-h-full object-contain" src="" alt="Loading screen...">
+                 <div class="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur px-3 py-1 rounded-full text-xs text-white/50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    Updating live...
+                 </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
         const messagesArea = document.getElementById('messages-area');
@@ -211,6 +248,50 @@
         
         // Initial scroll
         setTimeout(scrollToBottom, 100);
+
+        // --- Live Screen View Logic ---
+        let screenInterval = null;
+        const screenModal = document.getElementById('screen-modal');
+        const screenImg = document.getElementById('screen-img');
+
+        function toggleScreenView() {
+            const isHidden = screenModal.classList.contains('hidden');
+            if (isHidden) {
+                screenModal.classList.remove('hidden');
+                startScreenStream();
+            } else {
+                screenModal.classList.add('hidden');
+                stopScreenStream();
+            }
+        }
+
+        function startScreenStream() {
+            stopScreenStream(); // clear any existing
+            refreshScreen();
+            screenInterval = setInterval(refreshScreen, 1000); // 1 update per second
+        }
+
+        function stopScreenStream() {
+            if (screenInterval) clearInterval(screenInterval);
+            screenInterval = null;
+        }
+
+        function refreshScreen() {
+            // timestamp to prevent caching
+            // Using .onload to avoid flickering if possible, though simple src replace is standard for MJPEG-like behavior
+            const tempImg = new Image();
+            tempImg.onload = () => {
+                screenImg.src = tempImg.src;
+            };
+            tempImg.src = '/api/screenshot?t=' + new Date().getTime();
+        }
+        
+        // Close modal on click outside
+        screenModal.addEventListener('click', (e) => {
+            if (e.target === screenModal) {
+                toggleScreenView();
+            }
+        });
     </script>
 </body>
 </html>

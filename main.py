@@ -391,9 +391,14 @@ def send_ntfy_notification(topic: str, simple_title: str, full_content: str, tag
         logger.debug("ntfy_topic not configured. Skipping notification.")
         return
 
+    # Handle topic vs full URL
+    target_url = topic
+    if not target_url.startswith("http"):
+        target_url = f"https://ntfy.sh/{target_url}"
+
     try:
         response = requests.post(
-            topic,
+            target_url,
             data=full_content.encode('utf-8'),
             headers={
                 "Title": simple_title.encode('utf-8'),
@@ -665,9 +670,9 @@ def notification_settings():
 def enable_ntfy():
     global config
     try:
-        # Generate a random topic code
-        random_code = secrets.token_urlsafe(12)
-        topic = f"https://ntfy.sh/clinex-{random_code}"
+        # Generate a random topic code (shorter)
+        random_code = secrets.token_urlsafe(10) # Was 12
+        topic = f"clinex-{random_code}" # Just the topic, no https://ntfy.sh/
         
         config['ntfy_topic'] = topic
         write_config(config)
@@ -983,6 +988,19 @@ def api_active():
                 win['has_icon'] = True
     
     return jsonify(active_windows)
+
+@app.route('/api/screenshot')
+def api_screenshot():
+    # Removed login check
+    try:
+        img = pyautogui.screenshot()
+        img_io = io.BytesIO()
+        img.save(img_io, 'JPEG', quality=70)
+        img_io.seek(0)
+        return send_file(img_io, mimetype='image/jpeg')
+    except Exception as e:
+        logger.error(f"Screenshot failed: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/get_icon')
 def get_icon():
