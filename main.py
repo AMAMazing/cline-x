@@ -598,7 +598,9 @@ def handle_llm_interaction(prompt):
     # Add the unified rules LAST (before the prompt) so they have highest priority
     prompt_instructions.append(unified_rules)
     
-    full_prompt = "\n".join(prompt_instructions)
+    fullpromptbefore = "\n".join(prompt_instructions)
+
+    full_prompt = re.sub(r'data:image\/png;base64,[A-Za-z0-9+\/=]+', '', fullpromptbefore)
 
     debug_mode = (terminal_log_level == 'debug')
     return talkto(current_model, full_prompt, image_list, debug=debug_mode)
