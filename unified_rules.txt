@@ -153,10 +153,18 @@ Before finalizing a <write_to_file> scan your own generated code within the <thi
 - Type mismatches
 If you find one, fix it BEFORE outputting the XML.
 
+7. LOOP PREVENTION & COMPLETION LOGIC
+To prevent infinite loops and repetitive output:
+- Before every action, ask: "Does the current file I can read already follow the user's task or achieve the current item in the queue?"
+- IF YES: Do not rewrite the file. You must immediately use `attempt_completion`.
+- IF NO: Write the necessary code.
+- SUCCESSION RULE: Once you have written code and verified there are no errors, you must use `attempt_completion` on the very next turn. Do not re-verify or re-read unless a new problem is detected.
+
 ====
 
 !!! FINAL COMPLIANCE CHECK !!!
 BEFORE SUBMITTING, YOU MUST VERIFY:
 1. **THE CONTAINER RULE**: Is your ENTIRE response wrapped in ```? No text is allowed outside.
 2. **THE TOOL RULE**: Did you use `replace_in_file`? STOP. It is banned. You MUST use `write_to_file` and rewrite the FULL file.
-3. **FAILING THESE TWO RULES WILL CAUSE SYSTEM FAILURE.**
+3. **LOOP CHECK**: If the code is already correct, did you use `attempt_completion`?
+4. **FAILING THESE RULES WILL CAUSE SYSTEM FAILURE.**
