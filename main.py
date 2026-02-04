@@ -855,6 +855,23 @@ def theme_settings():
         logger.error(f"Error setting theme: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/open-rules', methods=['POST'])
+def open_rules_file():
+    """Generic route to open any local file or folder path."""
+    try:
+        data = request.json
+        path = data.get('path')
+        
+        if not path or not os.path.exists(path):
+            return jsonify({'success': False, 'error': 'Path does not exist'}), 404
+        
+        # os.startfile is Windows-specific and opens the file in the default app
+        os.startfile(path)
+        return jsonify({'success': True, 'message': f'Opened {path}'})
+    except Exception as e:
+        logger.error(f"Failed to open path: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/chat/completions', methods=['POST'])
 @require_api_key
 @csrf.exempt # Exempt external API from CSRF
@@ -1122,6 +1139,16 @@ def ignore_project():
         return jsonify({'status': 'success', 'message': 'Project ignored'})
     return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
 
+def terminal_link(path):
+    """Creates a clickable link for terminal emulators that support OSC 8."""
+    # Convert backslashes to forward slashes for the file:// protocol
+    absolute_path = os.path.abspath(path).replace('\\', '/')
+    if not absolute_path.startswith('/'):
+        absolute_path = '/' + absolute_path
+    
+    # OSC 8 escape sequence: \033]8;;url\033\text\033]8;;\033\
+    return f"\033]8;;file://{absolute_path}\033\\{path}\033]8;;\033\\"
+
 @app.route('/get_messages')
 def get_messages():
     """Poll for new messages"""
@@ -1131,6 +1158,7 @@ def get_messages():
 def print_startup_banner():
     """Print a nice startup banner with all the important information"""
     colorama.init(autoreset=True)
+    rules_path = os.path.join(APP_PATH, "unified_rules.txt")
     
     # Replaced emojis with ASCII tags for Windows compatibility
     banner = f"""
@@ -1147,6 +1175,8 @@ def print_startup_banner():
         banner += f"""
    {colorama.Fore.WHITE}API Key: {colorama.Fore.MAGENTA + colorama.Style.BRIGHT}{API_KEY}{colorama.Style.RESET_ALL}"""
     
+    clickable_rules_path = terminal_link(rules_path)
+
     banner += f"""
 
 {colorama.Fore.YELLOW + colorama.Style.BRIGHT}[CONFIG] CURRENT SETTINGS:{colorama.Style.RESET_ALL}
@@ -1155,14 +1185,16 @@ def print_startup_banner():
    {colorama.Fore.WHITE}Terminal Output: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{terminal_log_level.capitalize()}{colorama.Style.RESET_ALL}
    {colorama.Fore.WHITE}Terminal Alerts: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{terminal_alert_level.capitalize()}{colorama.Style.RESET_ALL}
    {colorama.Fore.WHITE}Push Notifications: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{ntfy_notification_level.capitalize()}{colorama.Style.RESET_ALL}
-   {colorama.Fore.WHITE}Remote Tunnel: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{'Active' if tunnel_active else 'Inactive'}{colorama.Style.RESET_ALL}
-   {colorama.Fore.WHITE}Security Auth: {colorama.Fore.GREEN + colorama.Style.BRIGHT}{'Required' if auth_required else 'Optional'}{colorama.Style.RESET_ALL}
+
+{colorama.Fore.YELLOW + colorama.Style.BRIGHT}[FILES] SYSTEM RULES:{colorama.Style.RESET_ALL}
+   {colorama.Fore.WHITE}Unified Rules: {colorama.Fore.CYAN + colorama.Style.BRIGHT}{clickable_rules_path}{colorama.Style.RESET_ALL}
+   {colorama.Style.DIM}(Ctrl+Click the path above to edit rules directly){colorama.Style.RESET_ALL}
 
 {colorama.Fore.YELLOW + colorama.Style.BRIGHT}[PANEL] CONTROL PANEL:{colorama.Style.RESET_ALL}
    {colorama.Fore.WHITE}Open your browser and go to:{colorama.Style.RESET_ALL}
    {colorama.Fore.CYAN + colorama.Style.BRIGHT + colorama.Back.BLACK}  http://127.0.0.1:3001  {colorama.Style.RESET_ALL}
    
-   {colorama.Fore.WHITE}Configure notifications, alerts, models, and more!{colorama.Style.RESET_ALL}
+   {colorama.Fore.WHITE}Tip: Use the 'Open Rules in Editor' button in the dashboard for quick access!{colorama.Style.RESET_ALL}
 
 {colorama.Fore.CYAN + colorama.Style.BRIGHT}{'=' * 62}{colorama.Style.RESET_ALL}
 """
