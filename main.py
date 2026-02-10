@@ -377,8 +377,18 @@ def process_optimisewait_message(message):
     # maximize line removed as requested
     optimiseWait('newchat', autopath='linkimages')
     optimiseWait('taskhere', autopath='linkimages')
-    pyautogui.typewrite(message)
+    
+    # Use the existing set_clipboard helper from your code
+    set_clipboard(message)
+    
+    # Short sleep to ensure clipboard system is ready (optional but recommended)
+    time.sleep(0.1)
+    
+    # Paste and Enter
+    pyautogui.hotkey('ctrl', 'v')
+    time.sleep(0.1) 
     pyautogui.press('enter')
+
 
 # --- NTFY NOTIFICATION ---
 def send_ntfy_notification(topic: str, simple_title: str, full_content: str, tags: str = "tada"):
