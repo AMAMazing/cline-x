@@ -762,7 +762,13 @@ def toggle_tunnel():
             
             try:
                 ngrok.set_auth_token(ngrok_authtoken)
-                ngrok_tunnel = ngrok.connect(3001)
+                # Check for persistent domain env var
+                ngrok_domain = os.getenv("NGROK_DOMAIN")
+                if ngrok_domain:
+                    ngrok_tunnel = ngrok.connect(3001, domain=ngrok_domain)
+                else:
+                    ngrok_tunnel = ngrok.connect(3001)
+
                 tunnel_active = True
                 logger.info(f"ngrok tunnel established: {ngrok_tunnel.public_url}")
                 
@@ -1227,7 +1233,13 @@ if __name__ == '__main__':
                 exit()
         try:
             ngrok.set_auth_token(ngrok_authtoken)
-            ngrok_tunnel = ngrok.connect(3001)
+            # Check for persistent domain env var
+            ngrok_domain = os.getenv("NGROK_DOMAIN")
+            if ngrok_domain:
+                ngrok_tunnel = ngrok.connect(3001, domain=ngrok_domain)
+            else:
+                ngrok_tunnel = ngrok.connect(3001)
+
             logger.info(f"ngrok tunnel established: {ngrok_tunnel.public_url}")
         except Exception as e:
             logger.error(f"Failed to start ngrok: {e}")
