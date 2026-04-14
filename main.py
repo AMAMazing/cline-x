@@ -648,7 +648,7 @@ def model_route():
             new_model = data['model'].lower()
             if new_model not in ['deepseek', 'gemini', 'aistudio']:
                 return jsonify({'success': False, 'error': 'Invalid model'}), 400
-            current_model = new_model
+            
             config['model'] = current_model
             write_config(config)
             logger.info(f"Model switched to: {current_model}")
