@@ -30,6 +30,13 @@
         
         /* Mobile Height Fix */
         .h-dvh { height: 100dvh; }
+
+        .glass {
+            background: rgba(17, 17, 17, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
     </style>
 </head>
 <body class="bg-[#0A0A0A] text-gray-100 h-dvh flex flex-col font-sans selection:bg-blue-500/30 overflow-hidden">
@@ -37,23 +44,22 @@
     <div class="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/5 rounded-full blur-[100px] pointer-events-none z-0"></div>
     <div class="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/5 rounded-full blur-[100px] pointer-events-none z-0"></div>
 
-    <!-- Header -->
-    <header class="flex-shrink-0 flex justify-between items-center px-6 py-4 border-b border-gray-800 bg-[#0A0A0A]/80 backdrop-blur-md z-10">
-        <div class="flex items-center gap-4">
-            <a href="{{ url_for('dashboard') }}" class="p-2 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-white transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-            </a>
-            <div>
-                <h1 class="text-lg font-bold tracking-tight text-white truncate max-w-[60vw]">
-                    {{ project_name }}
-                </h1>
-                <p class="text-xs text-green-400 flex items-center gap-1">
-                    <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-                    Active Session
-                </p>
-            </div>
-        </div>
-    </header>
+    {% set active_bolt = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 text-green-400"><path stroke-linecap="round" stroke-linejoin="round" d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" /></svg>' %}
+
+    {% with 
+        header_title=project_name,
+        header_subtitle="Active Session",
+        subtitle_color="text-green-400",
+        subtitle_bg="bg-green-500",
+        show_back_button=True,
+        back_url=url_for('dashboard'),
+        show_settings=False,
+        icon_gradient="from-blue-600 to-purple-600",
+        project_icon_url=(url_for('get_icon', path=project_path) ~ "&t=" ~ range(1, 999999)|random) if project_has_icon else none,
+        header_icon_svg=none if project_has_icon else active_bolt
+    %}
+        {% include 'components/header.html' %}
+    {% endwith %}
 
     <!-- Messages Area -->
     <main class="flex-1 overflow-y-auto p-4 z-10" id="messages-area">
@@ -142,14 +148,13 @@
             div.className = `flex ${isUser ? 'justify-end' : 'justify-start'}`;
             
             const bubble = document.createElement('div');
-            // Tailwind classes for message bubbles
             bubble.className = isUser 
                 ? 'bg-gradient-to-br from-blue-600 to-purple-600 text-white rounded-2xl rounded-tr-none px-4 py-3 max-w-[85%] shadow-md'
                 : 'bg-gray-800 border border-gray-700 text-gray-200 rounded-2xl rounded-tl-none px-4 py-3 max-w-[85%] shadow-sm';
             
             const meta = document.createElement('div');
             meta.className = `text-[10px] mb-1 ${isUser ? 'text-blue-200' : 'text-gray-500'}`;
-            meta.textContent = isUser ? 'You \u2022 ' + (msg.time || '') : 'Assistant \u2022 ' + (msg.time || '');
+            meta.textContent = isUser ? 'You • ' + (msg.time || '') : 'Assistant • ' + (msg.time || '');
             
             const content = document.createElement('div');
             content.className = 'text-sm whitespace-pre-wrap leading-relaxed';
@@ -165,7 +170,6 @@
             if (messages.length === lastMessageCount) return;
             lastMessageCount = messages.length;
             
-            // Clear and Rebuild (Simple approach for consistency)
             messagesContainer.innerHTML = '';
             
             if (messages.length === 0) {
@@ -198,9 +202,8 @@
             if (!text) return;
 
             messageInput.value = '';
-            messageInput.style.height = 'auto'; // Reset height
+            messageInput.style.height = 'auto';
             
-            // Optimistic UI
             const pendingMsg = {
                 role: 'user',
                 text: text,
@@ -225,13 +228,11 @@
             }
         }
 
-        // Auto-resize textarea
         messageInput.addEventListener('input', function() {
             this.style.height = 'auto';
             this.style.height = (this.scrollHeight) + 'px';
         });
 
-        // Send on Enter
         messageInput.addEventListener('keydown', function(e) {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -239,17 +240,13 @@
             }
         });
         
-        // Focus input
         if (window.innerWidth > 768) messageInput.focus();
 
-        // Poll
         fetchMessages();
         setInterval(fetchMessages, 2000);
         
-        // Initial scroll
         setTimeout(scrollToBottom, 100);
 
-        // --- Live Screen View Logic ---
         let screenInterval = null;
         const screenModal = document.getElementById('screen-modal');
         const screenImg = document.getElementById('screen-img');
@@ -266,9 +263,9 @@
         }
 
         function startScreenStream() {
-            stopScreenStream(); // clear any existing
+            stopScreenStream();
             refreshScreen();
-            screenInterval = setInterval(refreshScreen, 1000); // 1 update per second
+            screenInterval = setInterval(refreshScreen, 1000);
         }
 
         function stopScreenStream() {
@@ -277,8 +274,6 @@
         }
 
         function refreshScreen() {
-            // timestamp to prevent caching
-            // Using .onload to avoid flickering if possible, though simple src replace is standard for MJPEG-like behavior
             const tempImg = new Image();
             tempImg.onload = () => {
                 screenImg.src = tempImg.src;
@@ -286,7 +281,6 @@
             tempImg.src = '/api/screenshot?t=' + new Date().getTime();
         }
         
-        // Close modal on click outside
         screenModal.addEventListener('click', (e) => {
             if (e.target === screenModal) {
                 toggleScreenView();

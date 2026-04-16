@@ -1,0 +1,18 @@
+{% macro render(has_icon, path, is_active=False, extra_classes="w-10 h-10") %}
+    {% if has_icon %}
+        <img class="{{ extra_classes }} object-contain transition-all duration-300" src="{{ url_for('get_icon', path=path) }}&t={{ range(1, 999999)|random }}" alt="Icon">
+    {% elif is_active %}
+        <div class="text-green-400">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="{{ extra_classes }}">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" />
+            </svg>
+        </div>
+    {% else %}
+        <div class="text-gray-600 group-hover:text-blue-400 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="{{ extra_classes }}">
+                <path d="M19.5 21a3 3 0 0 0 3-3V9a3 3 0 0 0-3-3h-5.379a.75.75 0 0 1-.53-.22L11.47 3.66A2.25 2.25 0 0 0 9.879 3H4.5a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h15Z" />
+                <path fill-opacity="0.5" d="M1.5 10.5V18a3 3 0 0 0 3 3h15a3 3 0 0 0 3-3v-7.5H1.5Z" />
+            </svg>
+        </div>
+    {% endif %}
+{% endmacro %}

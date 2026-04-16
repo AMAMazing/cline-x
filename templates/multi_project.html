@@ -39,31 +39,22 @@
     </style>
 </head>
 <body class="bg-[#0A0A0A] text-gray-100 min-h-screen font-sans selection:bg-blue-500/30">
+    {% from "components/icon.html" import render as render_icon %}
     <!-- Background Gradients -->
     <div class="fixed top-[-10%] left-[-10%] w-[45%] h-[45%] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none z-0"></div>
     <div class="fixed bottom-[-10%] right-[-10%] w-[45%] h-[45%] bg-purple-600/10 rounded-full blur-[120px] pointer-events-none z-0"></div>
     
-    <header class="relative z-10 flex justify-between items-center px-8 py-5 border-b border-gray-800 glass sticky top-0">
-        <div class="flex items-center gap-5">
-            <a href="/" class="p-2.5 rounded-xl bg-gray-800/50 hover:bg-gray-700 text-gray-400 hover:text-white transition-all border border-gray-700/50 shadow-lg">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-            </a>
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 bg-gradient-to-br from-blue-600 to-cyan-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-900/20 text-white">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
-                </div>
-                <div>
-                    <h1 class="text-xl font-bold tracking-tight text-white leading-none">Multi-Project Agent</h1>
-                    <p class="text-[10px] font-semibold text-blue-400 uppercase tracking-widest mt-1.5 flex items-center gap-1.5">
-                        <span class="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
-                        Batch Processing Mode
-                    </p>
-                </div>
-            </div>
-        </div>
-    </header>
+    {% with 
+        header_title="Multi-Project Agent",
+        header_subtitle="Batch Processing Mode",
+        show_back_button=True,
+        back_url="/",
+        show_settings=False
+    %}
+        {% include 'components/header.html' %}
+    {% endwith %}
 
-    <main class="relative z-10 max-w-4xl mx-auto p-8 flex flex-col gap-8" id="project-list">
+    <main class="relative z-10 max-w-4xl mx-auto p-8 flex flex-col g-8" id="project-list">
         <!-- Project blocks go here -->
     </main>
 
@@ -118,16 +109,7 @@
                              data-has-icon="{{ 'true' if project.has_icon else 'false' }}"
                              onclick="handleModalSelection(this)">
                             
-                            {% if project.has_icon %}
-                                <img class="w-10 h-10 object-contain" src="{{ url_for('get_icon', path=project.path) }}" alt="Icon">
-                            {% else %}
-                                <div class="text-gray-600 group-hover:text-blue-400 transition-colors">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-10 h-10">
-                                        <path d="M19.5 21a3 3 0 0 0 3-3V9a3 3 0 0 0-3-3h-5.379a.75.75 0 0 1-.53-.22L11.47 3.66A2.25 2.25 0 0 0 9.879 3H4.5a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h15Z" />
-                                        <path fill-opacity="0.5" d="M1.5 10.5V18a3 3 0 0 0 3 3h15a3 3 0 0 0 3-3v-7.5H1.5Z" />
-                                    </svg>
-                                </div>
-                            {% endif %}
+                            {{ render_icon(project.has_icon, project.path, is_active=False) }}
                             
                             <div class="text-xs font-bold text-gray-400 group-hover:text-white text-center line-clamp-2 transition-colors">
                                 {{ project.name }}
@@ -147,6 +129,8 @@
         let activeBlockId = null;
 
         const folderSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-10 h-10"><path d="M19.5 21a3 3 0 0 0 3-3V9a3 3 0 0 0-3-3h-5.379a.75.75 0 0 1-.53-.22L11.47 3.66A2.25 2.25 0 0 0 9.879 3H4.5a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h15Z" /><path fill-opacity="0.5" d="M1.5 10.5V18a3 3 0 0 0 3 3h15a3 3 0 0 0 3-3v-7.5H1.5Z" /></svg>`;
+
+        const activeLightningSvg = `<div class="text-green-400"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-10 h-10"><path stroke-linecap="round" stroke-linejoin="round" d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" /></svg></div>`;
 
         function openProjectModal(blockId) {
             activeBlockId = blockId;
@@ -194,7 +178,7 @@
                 placeholder.classList.add('hidden');
 
                 if (hasIcon) {
-                    iconDisplay.innerHTML = `<img src="/get_icon?path=${encodeURIComponent(path)}" class="w-10 h-10 object-contain">`;
+                    iconDisplay.innerHTML = `<img src="/get_icon?path=${encodeURIComponent(path)}&t=${new Date().getTime()}" class="w-10 h-10 object-contain">`;
                 } else {
                     iconDisplay.innerHTML = `<div class="text-gray-600">${folderSvg}</div>`;
                 }

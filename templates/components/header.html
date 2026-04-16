@@ -1,0 +1,41 @@
+<header class="relative z-20 flex items-center justify-between px-8 py-6 bg-[#0A0A0A]/50 backdrop-blur-xl border-b border-gray-800/50">
+    <div class="flex items-center gap-5">
+        {% if show_back_button %}
+        <a href="{{ back_url }}" class="p-2.5 rounded-xl bg-gray-800/50 hover:bg-gray-800 text-gray-400 hover:text-white transition-all border border-gray-700/50 group/back">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="group-hover/back:-translate-x-0.5 transition-transform"><path d="m15 18-6-6 6-6"/></svg>
+        </a>
+        {% endif %}
+        
+        <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-gradient-to-br {{ icon_gradient|default('from-blue-600 to-indigo-600') }} p-0.5 shadow-lg shadow-blue-900/20">
+                <div class="w-full h-full rounded-[14px] bg-[#0A0A0A] flex items-center justify-center overflow-hidden">
+                    {% if project_icon_url %}
+                        <img src="{{ project_icon_url }}" class="w-full h-full object-contain" alt="Project Icon">
+                    {% elif header_icon_svg %}
+                        {{ header_icon_svg|safe }}
+                    {% else %}
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-7 h-7 text-blue-400">
+                            <path d="M11.47 3.84a.75.75 0 011.06 0l8.69 8.69a.75.75 0 101.06-1.06l-8.69-8.69a2.25 2.25 0 00-3.18 0l-8.69 8.69a.75.75 0 001.06 1.06l8.69-8.69z" />
+                            <path d="M12 5.432l8.159 8.159c.03.03.06.058.091.086v6.198c0 1.035-.84 1.875-1.875 1.875H15a.75.75 0 01-.75-.75v-4.5a.75.75 0 00-.75-.75h-3a.75.75 0 00-.75.75V21a.75.75 0 01-.75.75H5.625a1.875 1.875 0 01-1.875-1.875v-6.198a2.29 2.29 0 00.091-.086L12 5.432z" />
+                        </svg>
+                    {% endif %}
+                </div>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-white tracking-tight">{{ header_title }}</h1>
+                <div class="flex items-center gap-2 mt-0.5">
+                    <span class="w-1.5 h-1.5 rounded-full {{ subtitle_bg|default('bg-blue-500') }} animate-pulse"></span>
+                    <span class="text-[10px] font-bold {{ subtitle_color|default('text-blue-400') }} uppercase tracking-widest">{{ header_subtitle }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if show_settings %}
+    <div class="flex items-center gap-3">
+        <button class="p-2.5 rounded-xl bg-gray-800/50 hover:bg-gray-800 text-gray-400 hover:text-white transition-all border border-gray-700/50 group">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="group-hover:rotate-45 transition-transform"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+    </div>
+    {% endif %}
+</header>

@@ -29,6 +29,13 @@
         ::-webkit-scrollbar-thumb:hover { background: #444; }
         
         .hidden { display: none !important; }
+
+        .glass {
+            background: rgba(17, 17, 17, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
     </style>
 </head>
 <body class="bg-[#0A0A0A] text-gray-100 min-h-screen font-sans selection:bg-blue-500/30">
@@ -36,33 +43,18 @@
     <div class="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/5 rounded-full blur-[100px] pointer-events-none"></div>
     <div class="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/5 rounded-full blur-[100px] pointer-events-none"></div>
 
-    <div class="relative z-10 container mx-auto px-6 py-8 max-w-7xl">
-        
-        <!-- Header -->
-        <div class="flex justify-between items-center mb-10 pb-6 border-b border-gray-800">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-900/20 text-white">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.59 14.37a6 6 0 0 1-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 0 0 6.16-12.12A14.98 14.98 0 0 0 9.631 8.41m5.96 5.96a14.926 14.926 0 0 1-5.841 2.58m-.119-8.54a6 6 0 0 0-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 0 0-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 0 1-2.448-2.448 14.9 14.9 0 0 1 .06-.312m-2.24 2.39a4.493 4.493 0 0 0-1.757 4.306 4.493 4.493 0 0 0 4.306-1.758M16.5 9a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z" />
-                    </svg>
-                </div>
-                <div>
-                    <h1 class="text-2xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
-                        VS Code Launcher
-                    </h1>
-                    <p class="text-xs text-gray-500">Local Project Manager</p>
-                </div>
-            </div>
-            <div class="flex gap-3">
-                <a href="/" class="px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm font-medium transition-colors border border-gray-700 flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
-                        <path fill-rule="evenodd" d="M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.295 1.473c.497.144.971.342 1.416.587l1.25-.834a1 1 0 0 1 1.262.125l1.67 1.67a1 1 0 0 1 .125 1.262l-.834 1.25c.245.445.443.919.587 1.416l1.473.294a1 1 0 0 1 .804.98v2.36a1 1 0 0 1-.804.98l-1.473.295c-.144.497-.342.971-.587 1.416l.834 1.25a1 1 0 0 1-.125 1.262l-1.67 1.67a1 1 0 0 1-1.262.125l-1.25-.834a8.36 8.36 0 0 1-1.416.587l-.294 1.473a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.295-1.473a8.36 8.36 0 0 1-1.416-.587l-1.25.834a1 1 0 0 1-1.262-.125l-1.67-1.67a1 1 0 0 1-.125-1.262l.834-1.25a8.36 8.36 0 0 1-.587-1.416l-1.473-.294A1 1 0 0 1 1 10.82V8.46a1 1 0 0 1 .804-.98l1.473-.295c.144-.497.342-.971.587-1.416l-.834-1.25a1 1 0 0 1 .125-1.262l1.67-1.67a1 1 0 0 1 1.262-.125l1.25.834c.445-.245.919-.443 1.416-.587l.294-1.473ZM13 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" clip-rule="evenodd" />
-                    </svg>
-                    Settings
-                </a>
-            </div>
-        </div>
+    {% with 
+        header_title="VS Code Launcher",
+        header_subtitle="Local Project Manager",
+        show_back_button=True,
+        back_url="/",
+        show_settings=False,
+        header_icon_svg='<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M15.59 14.37a6 6 0 0 1-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 0 0 6.16-12.12A14.98 14.98 0 0 0 9.631 8.41m5.96 5.96a14.926 14.926 0 0 1-5.841 2.58m-.119-8.54a6 6 0 0 0-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 0 0-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 0 1-2.448-2.448 14.9 14.9 0 0 1 .06-.312m-2.24 2.39a4.493 4.493 0 0 0-1.757 4.306 4.493 4.493 0 0 0 4.306-1.758M16.5 9a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z" /></svg>'
+    %}
+        {% include 'components/header.html' %}
+    {% endwith %}
 
+    <div class="relative z-10 container mx-auto px-6 py-8 max-w-7xl">
         <!-- Search -->
         <div class="mb-12 relative max-w-2xl mx-auto">
             <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-500">
@@ -123,17 +115,13 @@
                         </button>
 
                         {% if project.has_icon %}
-                            <!-- Removed grayscale classes -->
                             <img class="w-10 h-10 object-contain transition-all duration-300" src="{{ url_for('get_icon', path=project.path) }}" alt="Icon">
                         {% else %}
-                            <!-- Replaced Emoji with SVG -->
                             <div class="text-gray-600 group-hover:text-blue-400 transition-colors">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-10 h-10">
-  <!-- Back of the folder (full opacity) -->
-  <path d="M19.5 21a3 3 0 0 0 3-3V9a3 3 0 0 0-3-3h-5.379a.75.75 0 0 1-.53-.22L11.47 3.66A2.25 2.25 0 0 0 9.879 3H4.5a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h15Z" />
-  <!-- Front of the folder (semi-transparent) -->
-  <path fill-opacity="0.5" d="M1.5 10.5V18a3 3 0 0 0 3 3h15a3 3 0 0 0 3-3v-7.5H1.5Z" />
-</svg>
+                                    <path d="M19.5 21a3 3 0 0 0 3-3V9a3 3 0 0 0-3-3h-5.379a.75.75 0 0 1-.53-.22L11.47 3.66A2.25 2.25 0 0 0 9.879 3H4.5a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h15Z" />
+                                    <path fill-opacity="0.5" d="M1.5 10.5V18a3 3 0 0 0 3 3h15a3 3 0 0 0 3-3v-7.5H1.5Z" />
+                                </svg>
                             </div>
                         {% endif %}
                         

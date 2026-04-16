@@ -440,7 +440,7 @@ def theme_settings():
             return jsonify({'success': False, 'error': 'Invalid request'}), 400
         
         new_theme = data['theme'].lower()
-        if new_theme not in ['light', 'dark']:
+        if new_theme not in ['light', 'dark'] or not new_theme:
             return jsonify({'success': False, 'error': 'Invalid theme'}), 400
 
         current_theme = new_theme
@@ -591,7 +591,8 @@ def multi_project():
     for p in visible_projects:
         projects_data.append({
             'path': p,
-            'name': os.path.basename(p)
+            'name': os.path.basename(p),
+            'has_icon': find_project_icon(p) is not None
         })
     return render_template('multi_project.html', projects=projects_data)
 
@@ -605,7 +606,18 @@ def batch_status():
 @app.route('/chat')
 def chat():
     project_name = request.args.get('project', 'Project')
-    return render_template('chat.html', project_name=project_name)
+    
+    all_projects = get_vscode_projects()
+    project_path = ""
+    project_has_icon = False
+    
+    matched_proj = next((p for p in all_projects if os.path.basename(p) == project_name), None)
+    if matched_proj:
+        project_path = matched_proj
+        if find_project_icon(matched_proj):
+            project_has_icon = True
+            
+    return render_template('chat.html', project_name=project_name, project_path=project_path, project_has_icon=project_has_icon)
 
 @app.route('/api/active')
 def api_active():
@@ -640,6 +652,11 @@ def get_icon():
     project_path = request.args.get('path')
     if not project_path:
         return abort(404)
+    
+    # Strip any cache-busting parameters if they accidentally got into the path
+    if '?' in project_path:
+        project_path = project_path.split('?')[0]
+        
     icon_path = find_project_icon(project_path)
     if icon_path and os.path.exists(icon_path):
         return send_file(icon_path, mimetype='image/x-icon')
@@ -690,7 +707,15 @@ def focus():
             windows = gw.getWindowsWithTitle(title_to_find)
             if windows:
                 win = windows[0]
-                project_name = win.title.replace(" - Visual Studio Code", "").strip()
+                # Improved project name extraction: VS Code title is typically "filename - projectname - Visual Studio Code"
+                # We want only the "projectname" part.
+                raw_title = win.title.replace(" - Visual Studio Code", "").strip()
+                if " - " in raw_title:
+                    parts = raw_title.split(" - ")
+                    # If it's "file - project", we take the last part.
+                    project_name = parts[-1].strip()
+                else:
+                    project_name = raw_title
 
                 force_bring_to_front(win._hWnd)
                 
