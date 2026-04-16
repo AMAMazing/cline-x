@@ -40,7 +40,6 @@
 </head>
 <body class="bg-[#0A0A0A] text-gray-100 min-h-screen font-sans selection:bg-blue-500/30">
     {% from "components/icon.html" import render as render_icon %}
-    <!-- Background Gradients -->
     <div class="fixed top-[-10%] left-[-10%] w-[45%] h-[45%] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none z-0"></div>
     <div class="fixed bottom-[-10%] right-[-10%] w-[45%] h-[45%] bg-purple-600/10 rounded-full blur-[120px] pointer-events-none z-0"></div>
     
@@ -55,8 +54,7 @@
     {% endwith %}
 
     <main class="relative z-10 max-w-4xl mx-auto p-8 flex flex-col g-8" id="project-list">
-        <!-- Project blocks go here -->
-    </main>
+        </main>
 
     <div class="relative z-10 max-w-4xl mx-auto px-8 flex gap-4">
         <button onclick="addProjectBlock()" class="flex-1 border-2 border-gray-800 border-dashed hover:border-blue-500/50 hover:bg-blue-500/5 text-gray-500 hover:text-blue-400 font-semibold py-5 rounded-2xl transition-all flex items-center justify-center gap-3 group">
@@ -74,7 +72,6 @@
         </button>
     </div>
 
-    <!-- Project Selection Modal -->
     <div id="project-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] hidden flex items-center justify-center p-6">
         <div class="relative w-full max-w-5xl bg-[#111] border border-gray-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
             <div class="flex justify-between items-center p-6 border-b border-gray-800 bg-[#0A0A0A]">
@@ -111,7 +108,7 @@
                             
                             {{ render_icon(project.has_icon, project.path, is_active=False) }}
                             
-                            <div class="text-xs font-bold text-gray-400 group-hover:text-white text-center line-clamp-2 transition-colors">
+                            <div class="project-title text-xs font-bold text-gray-400 group-hover:text-white text-center line-clamp-2 transition-colors">
                                 {{ project.name }}
                             </div>
                         </div>
@@ -162,7 +159,8 @@
 
         function handleModalSelection(element) {
             const path = element.dataset.path;
-            const name = element.querySelector('div').textContent.trim();
+            // Updated to use the specific class
+            const name = element.querySelector('.project-title').textContent.trim();
             const hasIcon = element.dataset.hasIcon === 'true';
             
             if (activeBlockId) {
@@ -190,6 +188,7 @@
             blockCounter++;
             const id = 'block-' + blockCounter;
             
+            // Updated project-icon-preview class list to remove background, border, and shadow
             const html = `
                 <div id="${id}" class="project-block bg-[#111] border border-gray-800 rounded-3xl p-6 shadow-2xl transition-all relative group hover:border-blue-500/20">
                     <button onclick="document.getElementById('${id}').remove()" class="absolute top-5 right-5 p-2 rounded-xl bg-gray-800/50 text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100 z-20" title="Remove Block">
@@ -205,7 +204,7 @@
                                 </label>
                                 
                                 <div onclick="openProjectModal('${id}')" class="flex items-center gap-4 bg-[#0A0A0A] border border-gray-800 rounded-2xl p-3 cursor-pointer hover:border-blue-500/30 hover:bg-[#151515] transition-all group/select shadow-inner">
-                                    <div class="project-icon-preview w-12 h-12 rounded-xl flex items-center justify-center bg-[#111] border border-gray-800 shadow-lg">
+                                    <div class="project-icon-preview w-12 h-12 flex items-center justify-center">
                                         <div class="text-gray-700">${folderSvg}</div>
                                     </div>
                                     <div class="flex-1">
