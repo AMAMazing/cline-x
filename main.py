@@ -31,6 +31,8 @@ from modules.vscode_utils import (force_bring_to_front, load_ignored_folders, sa
                                   get_active_windows, gw)
 from modules.terminal_utils import clear_previous_alert, print_completion_alert, print_summary_alert, print_startup_banner
 from modules.notify_utils import send_ntfy_notification
+from modules.project_utils import get_ui_projects_data, get_ui_active_windows, get_project_icon_info
+from modules.window_manager import focus_and_maximize_window, wait_for_vscode_window
 
 # Fix for Windows Unicode Output
 if sys.platform.startswith('win'):
@@ -556,44 +558,13 @@ def chat_completions():
 
 @app.route('/dashboard')
 def dashboard():
-    all_projects = get_vscode_projects()
-    ignored_folders = load_ignored_folders()
-    
-    visible_projects = [p for p in all_projects if p not in ignored_folders]
-    active_windows = get_active_windows()
-    
-    projects_data = []
-    for p in visible_projects:
-        projects_data.append({
-            'path': p,
-            'name': os.path.basename(p),
-            'has_icon': find_project_icon(p) is not None
-        })
-
-    for win in active_windows:
-        win['has_icon'] = False
-        win['path'] = "" 
-        matched_proj = next((p for p in all_projects if os.path.basename(p) == win['name']), None)
-        if matched_proj:
-            win['path'] = matched_proj
-            if find_project_icon(matched_proj):
-                win['has_icon'] = True
-
+    projects_data = get_ui_projects_data()
+    active_windows = get_ui_active_windows()
     return render_template('dashboard.html', projects=projects_data, active_windows=active_windows)
 
 @app.route('/multi_project')
 def multi_project():
-    all_projects = get_vscode_projects()
-    ignored_folders = load_ignored_folders()
-    visible_projects = [p for p in all_projects if p not in ignored_folders]
-    
-    projects_data = []
-    for p in visible_projects:
-        projects_data.append({
-            'path': p,
-            'name': os.path.basename(p),
-            'has_icon': find_project_icon(p) is not None
-        })
+    projects_data = get_ui_projects_data()
     return render_template('multi_project.html', projects=projects_data)
 
 @app.route('/api/batch_status')
@@ -606,34 +577,12 @@ def batch_status():
 @app.route('/chat')
 def chat():
     project_name = request.args.get('project', 'Project')
-    
-    all_projects = get_vscode_projects()
-    project_path = ""
-    project_has_icon = False
-    
-    matched_proj = next((p for p in all_projects if os.path.basename(p) == project_name), None)
-    if matched_proj:
-        project_path = matched_proj
-        if find_project_icon(matched_proj):
-            project_has_icon = True
-            
+    project_path, project_has_icon = get_project_icon_info(project_name)
     return render_template('chat.html', project_name=project_name, project_path=project_path, project_has_icon=project_has_icon)
 
 @app.route('/api/active')
 def api_active():
-    active_windows = get_active_windows()
-    all_projects = get_vscode_projects()
-    
-    for win in active_windows:
-        win['has_icon'] = False
-        win['path'] = "" 
-        matched_proj = next((p for p in all_projects if os.path.basename(p) == win['name']), None)
-        if matched_proj:
-            win['path'] = matched_proj
-            if find_project_icon(matched_proj):
-                win['has_icon'] = True
-    
-    return jsonify(active_windows)
+    return jsonify(get_ui_active_windows())
 
 @app.route('/api/screenshot')
 def api_screenshot():
@@ -653,7 +602,6 @@ def get_icon():
     if not project_path:
         return abort(404)
     
-    # Strip any cache-busting parameters if they accidentally got into the path
     if '?' in project_path:
         project_path = project_path.split('?')[0]
         
@@ -671,29 +619,7 @@ def launch():
         try:
             subprocess.Popen([vscode_exe, project_path], creationflags=subprocess.CREATE_NO_WINDOW)
             project_name = os.path.basename(project_path)
-            
-            found_window = False
-            for i in range(100): 
-                time.sleep(0.1) 
-                if gw:
-                    windows = gw.getWindowsWithTitle(project_name)
-                    for win in windows:
-                        if "Visual Studio Code" in win.title:
-                            try:
-                                force_bring_to_front(win._hWnd)
-                                found_window = True
-                            except Exception as e:
-                                logger.error(f"Error focusing new window: {e}")
-                            break
-                if found_window:
-                    break
-            
-            if optimiseWait:
-                try:
-                    optimiseWait('maximize', autopath='linkimages')
-                except Exception as e:
-                    logger.error(f"OptimiseWait maximize failed: {e}")
-
+            wait_for_vscode_window(project_name)
             return jsonify({'status': 'success', 'message': 'Opening...', 'project_name': project_name})
         except Exception as e:
             return jsonify({'status': 'error', 'message': str(e)}), 500
@@ -702,34 +628,10 @@ def launch():
 @app.route('/focus', methods=['POST'])
 def focus():
     title_to_find = request.json.get('title')
-    try:
-        if gw:
-            windows = gw.getWindowsWithTitle(title_to_find)
-            if windows:
-                win = windows[0]
-                # Improved project name extraction: VS Code title is typically "filename - projectname - Visual Studio Code"
-                # We want only the "projectname" part.
-                raw_title = win.title.replace(" - Visual Studio Code", "").strip()
-                if " - " in raw_title:
-                    parts = raw_title.split(" - ")
-                    # If it's "file - project", we take the last part.
-                    project_name = parts[-1].strip()
-                else:
-                    project_name = raw_title
-
-                force_bring_to_front(win._hWnd)
-                
-                if optimiseWait:
-                    try:
-                        optimiseWait('maximize', autopath='linkimages')
-                    except Exception as e:
-                        logger.error(f"OptimiseWait maximize failed: {e}")
-                
-                return jsonify({'status': 'success', 'message': 'Focused', 'project_name': project_name})
-        
-        return jsonify({'status': 'error', 'message': 'Window not found'}), 404
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+    project_name = focus_and_maximize_window(title_to_find)
+    if project_name:
+        return jsonify({'status': 'success', 'message': 'Focused', 'project_name': project_name})
+    return jsonify({'status': 'error', 'message': 'Window not found'}), 404
 
 @app.route('/send_message', methods=['POST'])
 @limiter.limit("20 per minute")
