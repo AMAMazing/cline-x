@@ -209,6 +209,7 @@ def handle_llm_interaction(prompt):
 
 # --- FLASK ROUTES ---
 @app.route('/', methods=['GET'])
+@limiter.exempt
 def home():
     logger.debug(f"GET request to / from {request.remote_addr}")
     public_url = ngrok_tunnel.public_url if 'ngrok_tunnel' in globals() and ngrok_tunnel else 'Starting...'
@@ -225,6 +226,7 @@ def home():
                            api_key=API_KEY)
 
 @app.route('/model', methods=['GET', 'POST'])
+@limiter.exempt
 def model_route():
     global current_model, config
     if request.method == 'GET':
@@ -248,6 +250,7 @@ def model_route():
             return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/notifications', methods=['POST'])
+@limiter.exempt
 def notification_settings():
     global ntfy_notification_level, config
     try:
@@ -269,6 +272,7 @@ def notification_settings():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/notifications/enable', methods=['POST'])
+@limiter.exempt
 def enable_ntfy():
     global config
     try:
@@ -284,6 +288,7 @@ def enable_ntfy():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/log-level', methods=['POST'])
+@limiter.exempt
 def set_log_level():
     global terminal_log_level, config
     try:
@@ -311,6 +316,7 @@ def set_log_level():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/alert-level', methods=['POST'])
+@limiter.exempt
 def set_alert_level():
     global terminal_alert_level, config
     try:
@@ -434,6 +440,7 @@ def toggle_auth():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/theme', methods=['POST'])
+@limiter.exempt
 def theme_settings():
     global current_theme, config
     try:
@@ -455,6 +462,7 @@ def theme_settings():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/open-rules', methods=['POST'])
+@limiter.exempt
 def open_rules_file():
     try:
         data = request.json
@@ -557,17 +565,20 @@ def chat_completions():
         return jsonify({'error': {'message': str(e)}}), 500
 
 @app.route('/dashboard')
+@limiter.exempt
 def dashboard():
     projects_data = get_ui_projects_data()
     active_windows = get_ui_active_windows()
     return render_template('dashboard.html', projects=projects_data, active_windows=active_windows)
 
 @app.route('/multi_project')
+@limiter.exempt
 def multi_project():
     projects_data = get_ui_projects_data()
     return render_template('multi_project.html', projects=projects_data)
 
 @app.route('/api/batch_status')
+@limiter.exempt
 def batch_status():
     return jsonify({
         'completed': global_completion_status,
@@ -575,16 +586,19 @@ def batch_status():
     })
 
 @app.route('/chat')
+@limiter.exempt
 def chat():
     project_name = request.args.get('project', 'Project')
     project_path, project_has_icon = get_project_icon_info(project_name)
     return render_template('chat.html', project_name=project_name, project_path=project_path, project_has_icon=project_has_icon)
 
 @app.route('/api/active')
+@limiter.exempt
 def api_active():
     return jsonify(get_ui_active_windows())
 
 @app.route('/api/screenshot')
+@limiter.exempt
 def api_screenshot():
     try:
         img = pyautogui.screenshot()
@@ -597,6 +611,7 @@ def api_screenshot():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/get_icon')
+@limiter.exempt
 def get_icon():
     project_path = request.args.get('path')
     if not project_path:
@@ -611,6 +626,7 @@ def get_icon():
     return abort(404)
 
 @app.route('/launch', methods=['POST'])
+@limiter.exempt
 def launch():
     project_path = request.json.get('path')
     vscode_exe = find_vscode_executable()
@@ -626,6 +642,7 @@ def launch():
     return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
 
 @app.route('/focus', methods=['POST'])
+@limiter.exempt
 def focus():
     title_to_find = request.json.get('title')
     project_name = focus_and_maximize_window(title_to_find)
@@ -654,6 +671,7 @@ def send_message():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/ignore', methods=['POST'])
+@limiter.exempt
 def ignore_project():
     project_path = request.json.get('path')
     if project_path:
@@ -662,6 +680,7 @@ def ignore_project():
     return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
 
 @app.route('/get_messages')
+@limiter.exempt
 def get_messages():
     return jsonify(chat_history)
 

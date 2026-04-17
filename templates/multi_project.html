@@ -36,6 +36,11 @@
         }
 
         .hidden { display: none !important; }
+        
+        .search-item.active {
+            background-color: rgba(59, 130, 246, 0.1);
+            border-color: rgba(59, 130, 246, 0.5);
+        }
     </style>
 </head>
 <body class="bg-[#0A0A0A] text-gray-100 min-h-screen font-sans selection:bg-blue-500/30">
@@ -53,8 +58,18 @@
         {% include 'components/header.html' %}
     {% endwith %}
 
-    <main class="relative z-10 max-w-4xl mx-auto p-8 flex flex-col g-8" id="project-list">
-        </main>
+    <div id="projects-data" class="hidden">
+        {% for project in projects %}
+        <div class="project-data-item" 
+             data-name="{{ project.name }}" 
+             data-path="{{ project.path }}" 
+             data-has-icon="{{ 'true' if project.has_icon else 'false' }}">
+        </div>
+        {% endfor %}
+    </div>
+
+    <main class="relative z-10 max-w-4xl mx-auto p-8 flex flex-col gap-8" id="project-list">
+    </main>
 
     <div class="relative z-10 max-w-4xl mx-auto px-8 flex gap-4">
         <button onclick="addProjectBlock()" class="flex-1 border-2 border-gray-800 border-dashed hover:border-blue-500/50 hover:bg-blue-500/5 text-gray-500 hover:text-blue-400 font-semibold py-5 rounded-2xl transition-all flex items-center justify-center gap-3 group">
@@ -72,149 +87,150 @@
         </button>
     </div>
 
-    <div id="project-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] hidden flex items-center justify-center p-6">
-        <div class="relative w-full max-w-5xl bg-[#111] border border-gray-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-            <div class="flex justify-between items-center p-6 border-b border-gray-800 bg-[#0A0A0A]">
-                <div>
-                    <h2 class="text-xl font-bold text-white">Select Project</h2>
-                    <p class="text-xs text-gray-500">Choose a workspace for this agent block</p>
-                </div>
-                <button onclick="closeProjectModal()" class="p-2 hover:bg-gray-800 rounded-xl text-gray-400 hover:text-white transition-colors border border-gray-800">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-                </button>
-            </div>
-
-            <div class="p-6 border-b border-gray-800">
-                <div class="relative">
-                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-500">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
-                            <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clip-rule="evenodd" />
-                        </svg>
-                    </div>
-                    <input type="text" id="modal-search" 
-                        class="w-full bg-[#0A0A0A] border border-gray-800 text-gray-100 text-sm rounded-2xl focus:ring-blue-500 focus:border-blue-500 block pl-12 p-4 placeholder-gray-600 transition-all" 
-                        placeholder="Search workspace name...">
-                </div>
-            </div>
-            
-            <div class="flex-1 overflow-y-auto p-6 bg-[#0A0A0A]/30">
-                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" id="modal-project-grid">
-                    {% for project in projects %}
-                        <div class="modal-project-item group relative bg-[#111] border border-gray-800 hover:border-blue-500/50 rounded-2xl p-5 shadow-lg hover:shadow-blue-900/10 transition-all cursor-pointer flex flex-col items-center justify-center gap-3 h-36"
-                             data-name="{{ project.name|lower }}" 
-                             data-path="{{ project.path }}"
-                             data-has-icon="{{ 'true' if project.has_icon else 'false' }}"
-                             onclick="handleModalSelection(this)">
-                            
-                            {{ render_icon(project.has_icon, project.path, is_active=False) }}
-                            
-                            <div class="project-title text-xs font-bold text-gray-400 group-hover:text-white text-center line-clamp-2 transition-colors">
-                                {{ project.name }}
-                            </div>
-                        </div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-    </div>
-
     <script>
         const projectList = document.getElementById('project-list');
-        const modal = document.getElementById('project-modal');
-        const searchInput = document.getElementById('modal-search');
         let blockCounter = 0;
-        let activeBlockId = null;
 
-        const folderSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-10 h-10"><path d="M19.5 21a3 3 0 0 0 3-3V9a3 3 0 0 0-3-3h-5.379a.75.75 0 0 1-.53-.22L11.47 3.66A2.25 2.25 0 0 0 9.879 3H4.5a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h15Z" /><path fill-opacity="0.5" d="M1.5 10.5V18a3 3 0 0 0 3 3h15a3 3 0 0 0 3-3v-7.5H1.5Z" /></svg>`;
+        const folderSvgSmall = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path d="M19.5 21a3 3 0 0 0 3-3V9a3 3 0 0 0-3-3h-5.379a.75.75 0 0 1-.53-.22L11.47 3.66A2.25 2.25 0 0 0 9.879 3H4.5a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h15Z" /><path fill-opacity="0.5" d="M1.5 10.5V18a3 3 0 0 0 3 3h15a3 3 0 0 0 3-3v-7.5H1.5Z" /></svg>`;
 
-        const activeLightningSvg = `<div class="text-green-400"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-10 h-10"><path stroke-linecap="round" stroke-linejoin="round" d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" /></svg></div>`;
+        // Parse projects data from HTML once
+        const allProjects = Array.from(document.querySelectorAll('.project-data-item')).map(el => ({
+            name: el.dataset.name,
+            path: el.dataset.path,
+            hasIcon: el.dataset.hasIcon === 'true'
+        }));
 
-        function openProjectModal(blockId) {
-            activeBlockId = blockId;
-            modal.classList.remove('hidden');
-            searchInput.value = '';
-            searchInput.focus();
-            filterModalProjects('');
-        }
-
-        function closeProjectModal() {
-            modal.classList.add('hidden');
-            activeBlockId = null;
-        }
-
-        searchInput.addEventListener('keyup', function() {
-            filterModalProjects(this.value.toLowerCase());
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('[id^="dropdown-container-"]')) {
+                hideAllDropdowns();
+            }
         });
 
-        function filterModalProjects(filter) {
-            const items = document.querySelectorAll('.modal-project-item');
-            items.forEach(item => {
-                if (item.dataset.name.includes(filter)) {
-                    item.classList.remove('hidden');
-                } else {
-                    item.classList.add('hidden');
-                }
-            });
+        function hideAllDropdowns() {
+            document.querySelectorAll('[id^="search-dropdown-"]').forEach(el => el.classList.add('hidden'));
+            // Remove elevated z-index from blocks
+            document.querySelectorAll('.project-block').forEach(el => el.style.zIndex = '1');
         }
 
-        function handleModalSelection(element) {
-            const path = element.dataset.path;
-            // Updated to use the specific class
-            const name = element.querySelector('.project-title').textContent.trim();
-            const hasIcon = element.dataset.hasIcon === 'true';
+        function handleSearch(blockId) {
+            const container = document.getElementById(blockId);
+            const input = container.querySelector('.project-search-input').value.toLowerCase();
+            const resultsContainer = container.querySelector('.search-results-list');
+            const pathInput = container.querySelector('.project-path-input');
             
-            if (activeBlockId) {
-                const block = document.getElementById(activeBlockId);
-                const pathInput = block.querySelector('.project-path-input');
-                const nameDisplay = block.querySelector('.project-name-display');
-                const iconDisplay = block.querySelector('.project-icon-preview');
-                const placeholder = block.querySelector('.project-select-placeholder');
+            // Clear valid path if user starts typing a new search
+            pathInput.value = '';
 
-                pathInput.value = path;
-                nameDisplay.textContent = name;
-                nameDisplay.classList.remove('hidden');
-                placeholder.classList.add('hidden');
+            let resultsHtml = '';
+            let count = 0;
 
-                if (hasIcon) {
-                    iconDisplay.innerHTML = `<img src="/get_icon?path=${encodeURIComponent(path)}&t=${new Date().getTime()}" class="w-10 h-10 object-contain">`;
-                } else {
-                    iconDisplay.innerHTML = `<div class="text-gray-600">${folderSvg}</div>`;
+            allProjects.forEach((project, index) => {
+                const lowerName = project.name.toLowerCase();
+                const lowerPath = project.path.toLowerCase();
+
+                if (!input || lowerName.includes(input) || lowerPath.includes(input)) {
+                    count++;
+                    const iconHtml = project.hasIcon 
+                        ? `<img src="/get_icon?path=${encodeURIComponent(project.path)}&t=${new Date().getTime()}" class="w-6 h-6 object-contain">`
+                        : `<div class="text-gray-600">${folderSvgSmall}</div>`;
+
+                    resultsHtml += `
+                        <div class="search-item flex items-center gap-3 px-4 py-3 hover:bg-blue-500/10 cursor-pointer transition-colors border-l-2 border-transparent hover:border-blue-500" 
+                             onclick="selectProject('${blockId}', ${index})">
+                            <div class="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-gray-900 rounded-lg">
+                                ${iconHtml}
+                            </div>
+                            <div class="flex flex-col min-w-0">
+                                <div class="text-sm font-semibold text-gray-100 truncate">${project.name}</div>
+                                <div class="text-[10px] text-gray-500 truncate font-mono">${project.path}</div>
+                            </div>
+                        </div>
+                    `;
                 }
+            });
+
+            if (count > 0) {
+                resultsContainer.innerHTML = resultsHtml;
+            } else {
+                resultsContainer.innerHTML = `<div class="px-4 py-3 text-sm text-gray-500">No projects found matching "${input}"</div>`;
             }
-            closeProjectModal();
+
+            showDropdown(blockId);
+        }
+
+        function showDropdown(blockId) {
+            hideAllDropdowns(); // Hide others
+            const block = document.getElementById(blockId);
+            block.style.zIndex = '50'; // Elevate current block so dropdown overlays others
+            
+            const resultsContainer = block.querySelector('.search-results-list');
+            const dropdown = block.querySelector('[id^="search-dropdown-"]');
+            
+            if (resultsContainer.innerHTML.trim() === '') {
+                handleSearch(blockId); // Populate default list if empty
+            }
+            
+            dropdown.classList.remove('hidden');
+        }
+
+        function selectProject(blockId, projectIndex) {
+            const project = allProjects[projectIndex];
+            const block = document.getElementById(blockId);
+            
+            block.querySelector('.project-path-input').value = project.path;
+            block.querySelector('.project-search-input').value = project.name;
+            
+            const iconDisplay = block.querySelector('.project-icon-preview');
+            if (project.hasIcon) {
+                iconDisplay.innerHTML = `<img src="/get_icon?path=${encodeURIComponent(project.path)}&t=${new Date().getTime()}" class="w-6 h-6 object-contain">`;
+            } else {
+                iconDisplay.innerHTML = `<div class="text-gray-500">${folderSvgSmall}</div>`;
+            }
+            
+            hideAllDropdowns();
         }
 
         function addProjectBlock() {
             blockCounter++;
             const id = 'block-' + blockCounter;
             
-            // Updated project-icon-preview class list to remove background, border, and shadow
             const html = `
-                <div id="${id}" class="project-block bg-[#111] border border-gray-800 rounded-3xl p-6 shadow-2xl transition-all relative group hover:border-blue-500/20">
+                <div id="${id}" class="project-block bg-[#111] border border-gray-800 rounded-3xl p-6 shadow-2xl transition-all relative group hover:border-blue-500/20" style="z-index: 1;">
                     <button onclick="document.getElementById('${id}').remove()" class="absolute top-5 right-5 p-2 rounded-xl bg-gray-800/50 text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100 z-20" title="Remove Block">
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                     </button>
                     
                     <div class="flex flex-col gap-6">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div class="space-y-2">
+                            <div class="space-y-2 relative" id="dropdown-container-${id}">
                                 <label class="flex items-center gap-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
                                     Project Workspace
                                 </label>
                                 
-                                <div onclick="openProjectModal('${id}')" class="flex items-center gap-4 bg-[#0A0A0A] border border-gray-800 rounded-2xl p-3 cursor-pointer hover:border-blue-500/30 hover:bg-[#151515] transition-all group/select shadow-inner">
-                                    <div class="project-icon-preview w-12 h-12 flex items-center justify-center">
-                                        <div class="text-gray-700">${folderSvg}</div>
+                                <div class="relative flex items-center gap-3 bg-[#0A0A0A] border border-gray-800 rounded-2xl p-2 focus-within:border-blue-500/50 focus-within:ring-2 focus-within:ring-blue-500/20 transition-all shadow-inner">
+                                    <div class="project-icon-preview w-10 h-10 flex-shrink-0 flex items-center justify-center bg-gray-900 rounded-xl">
+                                        <div class="text-gray-600">${folderSvgSmall}</div>
                                     </div>
-                                    <div class="flex-1">
+                                    
+                                    <div class="flex-1 relative">
                                         <input type="hidden" class="project-path-input" value="">
-                                        <div class="project-select-placeholder text-sm text-gray-600 font-medium">Click to select workspace...</div>
-                                        <div class="project-name-display hidden text-sm text-blue-400 font-bold tracking-tight"></div>
+                                        <input type="text" class="project-search-input w-full bg-transparent text-sm text-gray-100 placeholder-gray-600 outline-none h-full py-2" 
+                                               placeholder="Search workspace..." 
+                                               oninput="handleSearch('${id}')" 
+                                               onfocus="showDropdown('${id}')"
+                                               autocomplete="off">
                                     </div>
-                                    <div class="p-2 rounded-lg bg-gray-800/50 group-hover/select:text-blue-400 text-gray-600">
+                                    
+                                    <div class="pr-2 text-gray-600 pointer-events-none">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
                                     </div>
+                                </div>
+
+                                <div id="search-dropdown-${id}" class="absolute top-full left-0 right-0 mt-2 bg-[#111] border border-gray-800 rounded-2xl shadow-2xl z-[100] hidden overflow-hidden max-h-[300px] flex flex-col">
+                                    <div class="search-results-list overflow-y-auto py-2">
+                                        </div>
                                 </div>
                             </div>
                             
@@ -223,7 +239,7 @@
                                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                                     Agent Instructions
                                 </label>
-                                <textarea class="w-full bg-[#0A0A0A] border border-gray-800 rounded-2xl px-4 py-4 text-sm text-gray-100 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none resize-none h-[68px] textarea-prompt transition-all shadow-inner" placeholder="Enter task details for this specific project..."></textarea>
+                                <textarea class="w-full bg-[#0A0A0A] border border-gray-800 rounded-2xl px-4 py-4 text-sm text-gray-100 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none resize-none h-[60px] textarea-prompt transition-all shadow-inner" placeholder="Enter task details for this specific project..."></textarea>
                             </div>
                         </div>
 
