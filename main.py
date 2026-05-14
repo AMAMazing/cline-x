@@ -207,6 +207,52 @@ def handle_llm_interaction(prompt):
     debug_mode = (terminal_log_level == 'debug')
     return talkto(current_model, full_prompt, image_list, debug=debug_mode)
 
+def filter_ignored_projects(items):
+    ignored = load_ignored_folders()
+    if not ignored:
+        return items
+    ignored_norm = [os.path.normcase(os.path.normpath(p)) for p in ignored]
+    return [item for item in items if not item.get('path') or os.path.normcase(os.path.normpath(item['path'])) not in ignored_norm]
+
+def get_all_projects_with_ignore_state():
+    projects = get_ui_projects_data()
+    ignored = load_ignored_folders()
+    
+    if not ignored:
+        for p in projects:
+            p['is_ignored'] = False
+        return projects
+        
+    ignored_norm = [os.path.normcase(os.path.normpath(p)) for p in ignored]
+    project_paths_norm = set()
+    
+    for p in projects:
+        p_path = p.get('path')
+        if p_path:
+            norm_p = os.path.normcase(os.path.normpath(p_path))
+            p['is_ignored'] = norm_p in ignored_norm
+            project_paths_norm.add(norm_p)
+        else:
+            p['is_ignored'] = False
+            
+    # Add any ignored folders that are not currently in the projects list (because they were filtered out upstream)
+    for ig_path in ignored:
+        norm_ig = os.path.normcase(os.path.normpath(ig_path))
+        if norm_ig not in project_paths_norm:
+            icon_path = find_project_icon(ig_path)
+            projects.append({
+                'name': os.path.basename(ig_path) or ig_path,
+                'path': ig_path,
+                'has_icon': bool(icon_path and os.path.exists(icon_path)),
+                'is_ignored': True
+            })
+            project_paths_norm.add(norm_ig)
+            
+    # Sort projects so that ignored ones appear at the beginning, preserving existing order otherwise.
+    projects.sort(key=lambda x: not x.get('is_ignored', False))
+            
+    return projects
+
 # --- FLASK ROUTES ---
 @app.route('/', methods=['GET'])
 @limiter.exempt
@@ -567,15 +613,17 @@ def chat_completions():
 @app.route('/dashboard')
 @limiter.exempt
 def dashboard():
-    projects_data = get_ui_projects_data()
-    active_windows = get_ui_active_windows()
-    return render_template('dashboard.html', projects=projects_data, active_windows=active_windows)
+    all_projects = get_all_projects_with_ignore_state()
+    projects_data = [p for p in all_projects if not p.get('is_ignored')]
+    active_windows = filter_ignored_projects(get_ui_active_windows())
+    return render_template('dashboard.html', projects=projects_data, active_windows=active_windows, all_projects=all_projects)
 
 @app.route('/multi_project')
 @limiter.exempt
 def multi_project():
-    projects_data = get_ui_projects_data()
-    return render_template('multi_project.html', projects=projects_data)
+    all_projects = get_all_projects_with_ignore_state()
+    projects_data = [p for p in all_projects if not p.get('is_ignored')]
+    return render_template('multi_project.html', projects=projects_data, all_projects=all_projects)
 
 @app.route('/api/batch_status')
 @limiter.exempt
@@ -595,7 +643,7 @@ def chat():
 @app.route('/api/active')
 @limiter.exempt
 def api_active():
-    return jsonify(get_ui_active_windows())
+    return jsonify(filter_ignored_projects(get_ui_active_windows()))
 
 @app.route('/api/screenshot')
 @limiter.exempt
@@ -678,6 +726,55 @@ def ignore_project():
         save_ignored_folder(project_path)
         return jsonify({'status': 'success', 'message': 'Project ignored'})
     return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
+
+@app.route('/api/ignored', methods=['GET'])
+@limiter.exempt
+def get_ignored_route():
+    return jsonify(load_ignored_folders())
+
+@app.route('/api/unignore', methods=['POST'])
+@limiter.exempt
+def unignore_project_route():
+    project_path = request.json.get('path')
+    if not project_path:
+        return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
+    
+    ignored = load_ignored_folders()
+    norm_target = os.path.normcase(os.path.normpath(project_path))
+    new_ignored = [p for p in ignored if os.path.normcase(os.path.normpath(p)) != norm_target]
+    
+    try:
+        ignored_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ignored_folders.json')
+        with open(ignored_file_path, 'w', encoding='utf-8') as f:
+            json.dump(new_ignored, f, indent=4)
+        return jsonify({'status': 'success', 'message': 'Project unignored'})
+    except Exception as e:
+        logger.error(f"Failed to unignore project: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/multi_project_state', methods=['GET', 'POST'])
+@limiter.exempt
+def multi_project_state_route():
+    state_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'multi_project_state.json')
+    if request.method == 'GET':
+        try:
+            if os.path.exists(state_file_path):
+                with open(state_file_path, 'r', encoding='utf-8') as f:
+                    return jsonify(json.load(f))
+            return jsonify([])
+        except Exception as e:
+            logger.error(f"Error reading multi_project_state: {e}")
+            return jsonify([])
+    
+    if request.method == 'POST':
+        try:
+            state_data = request.get_json()
+            with open(state_file_path, 'w', encoding='utf-8') as f:
+                json.dump(state_data, f, indent=4)
+            return jsonify({'status': 'success'})
+        except Exception as e:
+            logger.error(f"Error saving multi_project_state: {e}")
+            return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/get_messages')
 @limiter.exempt

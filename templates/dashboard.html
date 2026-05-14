@@ -39,6 +39,7 @@
     </style>
 </head>
 <body class="bg-[#0A0A0A] text-gray-100 min-h-screen font-sans selection:bg-blue-500/30">
+    {% from "components/icon.html" import render as render_icon %}
     <!-- Background Gradients -->
     <div class="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/5 rounded-full blur-[100px] pointer-events-none"></div>
     <div class="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/5 rounded-full blur-[100px] pointer-events-none"></div>
@@ -49,6 +50,7 @@
         show_back_button=True,
         back_url="/",
         show_settings=False,
+        show_ignored_button=True,
         header_icon_svg='<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M15.59 14.37a6 6 0 0 1-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 0 0 6.16-12.12A14.98 14.98 0 0 0 9.631 8.41m5.96 5.96a14.926 14.926 0 0 1-5.841 2.58m-.119-8.54a6 6 0 0 0-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 0 0-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 0 1-2.448-2.448 14.9 14.9 0 0 1 .06-.312m-2.24 2.39a4.493 4.493 0 0 0-1.757 4.306 4.493 4.493 0 0 0 4.306-1.758M16.5 9a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z" /></svg>'
     %}
         {% include 'components/header.html' %}
@@ -79,15 +81,7 @@
                          data-title="{{ win.full_title }}" 
                          onclick="focusProject(this.dataset.title)">
                         
-                        {% if win.has_icon %}
-                            <img class="w-10 h-10 object-contain" src="{{ url_for('get_icon', path=win.path) }}" alt="Icon">
-                        {% else %}
-                            <div class="text-green-400">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-8 h-8">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" />
-                                </svg>
-                            </div>
-                        {% endif %}
+                        {{ render_icon(win.has_icon, win.path, True) }}
                         
                         <div class="text-sm font-medium text-gray-300 group-hover:text-green-400 text-center line-clamp-2 transition-colors">
                             {{ win.name }}
@@ -114,16 +108,7 @@
                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                         </button>
 
-                        {% if project.has_icon %}
-                            <img class="w-10 h-10 object-contain transition-all duration-300" src="{{ url_for('get_icon', path=project.path) }}" alt="Icon">
-                        {% else %}
-                            <div class="text-gray-600 group-hover:text-blue-400 transition-colors">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-10 h-10">
-                                    <path d="M19.5 21a3 3 0 0 0 3-3V9a3 3 0 0 0-3-3h-5.379a.75.75 0 0 1-.53-.22L11.47 3.66A2.25 2.25 0 0 0 9.879 3H4.5a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h15Z" />
-                                    <path fill-opacity="0.5" d="M1.5 10.5V18a3 3 0 0 0 3 3h15a3 3 0 0 0 3-3v-7.5H1.5Z" />
-                                </svg>
-                            </div>
-                        {% endif %}
+                        {{ render_icon(project.has_icon, project.path) }}
                         
                         <div class="text-sm font-medium text-gray-400 group-hover:text-white text-center line-clamp-2 transition-colors">
                             {{ project.name }}

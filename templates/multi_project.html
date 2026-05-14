@@ -54,6 +54,7 @@
         show_back_button=True,
         back_url="/",
         show_settings=False,
+        show_ignored_button=True,
         header_icon_svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 text-blue-400"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 12 12 17 22 12"></polyline><polyline points="2 17 12 22 22 17"></polyline></svg>'
     %}
         {% include 'components/header.html' %}
@@ -69,7 +70,7 @@
         {% endfor %}
     </div>
 
-    <main class="relative z-10 max-w-4xl mx-auto p-8 flex flex-col gap-8" id="project-list">
+    <main class="relative z-20 max-w-4xl mx-auto p-8 flex flex-col gap-8" id="project-list">
     </main>
 
     <div class="relative z-10 max-w-4xl mx-auto px-8 flex gap-4">
@@ -144,7 +145,6 @@
                             </div>
                             <div class="flex flex-col min-w-0">
                                 <div class="text-sm font-semibold text-gray-100 truncate">${project.name}</div>
-                                <div class="text-[10px] text-gray-500 truncate font-mono">${project.path}</div>
                             </div>
                         </div>
                     `;
@@ -175,7 +175,7 @@
             dropdown.classList.remove('hidden');
         }
 
-        function selectProject(blockId, projectIndex) {
+        function selectProject(blockId, projectIndex, shouldSave = true) {
             const project = allProjects[projectIndex];
             const block = document.getElementById(blockId);
             
@@ -190,15 +190,16 @@
             }
             
             hideAllDropdowns();
+            if (shouldSave) saveMultiProjectState();
         }
 
-        function addProjectBlock() {
+        function addProjectBlock(savedData = null) {
             blockCounter++;
             const id = 'block-' + blockCounter;
             
             const html = `
                 <div id="${id}" class="project-block bg-[#111] border border-gray-800 rounded-3xl p-6 shadow-2xl transition-all relative group hover:border-blue-500/20" style="z-index: 1;">
-                    <button onclick="document.getElementById('${id}').remove()" class="absolute top-5 right-5 p-2 rounded-xl bg-gray-800/50 text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100 z-20" title="Remove Block">
+                    <button onclick="document.getElementById('${id}').remove(); saveMultiProjectState();" class="absolute top-5 right-5 p-2 rounded-xl bg-gray-800/50 text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100 z-20" title="Remove Block">
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                     </button>
                     
@@ -265,10 +266,96 @@
             `;
             
             projectList.insertAdjacentHTML('beforeend', html);
+            
+            const block = document.getElementById(id);
+            const textarea = block.querySelector('.textarea-prompt');
+            textarea.addEventListener('input', saveMultiProjectState);
+
+            if (savedData) {
+                if (savedData.prompt) {
+                    textarea.value = savedData.prompt;
+                }
+                if (savedData.path) {
+                    const projectIndex = allProjects.findIndex(p => p.path === savedData.path);
+                    if (projectIndex !== -1) {
+                        selectProject(id, projectIndex, false);
+                    } else {
+                        block.querySelector('.project-path-input').value = savedData.path;
+                        block.querySelector('.project-search-input').value = savedData.path.split(/[\\/]/).pop() || savedData.path;
+                    }
+                }
+            }
+
+            if (!savedData) {
+                saveMultiProjectState();
+            }
+        }
+
+        let saveTimeout;
+        function saveMultiProjectState() {
+            const blocks = document.querySelectorAll('.project-block');
+            const state = [];
+            blocks.forEach(block => {
+                const path = block.querySelector('.project-path-input').value;
+                const prompt = block.querySelector('.textarea-prompt').value;
+                state.push({ path, prompt });
+            });
+            
+            localStorage.setItem('multiProjectState', JSON.stringify(state));
+
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(() => {
+                const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+                const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
+                if (csrfToken) {
+                    fetch('/api/multi_project_state', {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrfToken
+                        },
+                        body: JSON.stringify(state)
+                    }).catch(err => console.error('Failed to sync state to server:', err));
+                }
+            }, 1000);
+        }
+
+        async function initMultiProject() {
+            let state = null;
+            try {
+                const res = await fetch('/api/multi_project_state');
+                const backendState = await res.json();
+                if (Array.isArray(backendState) && backendState.length > 0) {
+                    state = backendState;
+                    localStorage.setItem('multiProjectState', JSON.stringify(state));
+                }
+            } catch (e) {
+                console.error("Failed to load backend state", e);
+            }
+
+            if (!state || state.length === 0) {
+                try {
+                    const saved = localStorage.getItem('multiProjectState');
+                    if (saved) {
+                        const localState = JSON.parse(saved);
+                        if (Array.isArray(localState) && localState.length > 0) {
+                            state = localState;
+                        }
+                    }
+                } catch (e) {
+                    console.error("Failed to parse local state", e);
+                }
+            }
+
+            if (state && state.length > 0) {
+                state.forEach(savedData => addProjectBlock(savedData));
+            } else {
+                addProjectBlock();
+            }
         }
 
         // Init
-        addProjectBlock();
+        initMultiProject();
 
         async function sendBatchPrompts() {
             const btn = document.getElementById('btn-send-batch');
