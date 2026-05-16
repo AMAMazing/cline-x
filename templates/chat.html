@@ -131,6 +131,26 @@
         </div>
     </div>
 
+    <!-- Full Response Modal -->
+    <div id="full-response-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] hidden flex items-center justify-center p-4">
+        <div class="relative w-full max-w-4xl h-[80vh] bg-[#111] border border-gray-700 rounded-2xl overflow-hidden shadow-2xl flex flex-col animate-in fade-in zoom-in duration-200">
+            <!-- Modal Header -->
+            <div class="flex justify-between items-center px-4 py-3 border-b border-gray-800 bg-[#0A0A0A]">
+                <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium text-gray-300">Full Response</span>
+                </div>
+                <button onclick="hideFullResponse()" class="p-1 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
+            </div>
+            
+            <!-- Modal Content -->
+            <div class="flex-1 p-4 overflow-y-auto bg-[#0A0A0A]">
+                 <pre id="full-response-content" class="text-sm text-gray-200 whitespace-pre-wrap font-mono"></pre>
+            </div>
+        </div>
+    </div>
+
     <script>
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
         const messagesArea = document.getElementById('messages-area');
@@ -154,7 +174,7 @@
             
             const meta = document.createElement('div');
             meta.className = `text-[10px] mb-1 ${isUser ? 'text-blue-200' : 'text-gray-500'}`;
-            meta.textContent = isUser ? 'You • ' + (msg.time || '') : 'Assistant • ' + (msg.time || '');
+            meta.textContent = isUser ? 'You \u2022 ' + (msg.time || '') : (msg.role === 'system' ? 'System \u2022 ' : 'Assistant \u2022 ') + (msg.time || '');
             
             const content = document.createElement('div');
             content.className = 'text-sm whitespace-pre-wrap leading-relaxed';
@@ -163,6 +183,13 @@
             bubble.appendChild(meta);
             bubble.appendChild(content);
             div.appendChild(bubble);
+
+            if (!isUser && msg.full_text) {
+                bubble.classList.add('cursor-pointer', 'hover:bg-gray-700', 'transition-colors');
+                bubble.title = "Click to view full response";
+                bubble.onclick = () => showFullResponse(msg.full_text);
+            }
+            
             return div;
         }
 
@@ -284,6 +311,24 @@
         screenModal.addEventListener('click', (e) => {
             if (e.target === screenModal) {
                 toggleScreenView();
+            }
+        });
+
+        function showFullResponse(text) {
+            const modal = document.getElementById('full-response-modal');
+            const content = document.getElementById('full-response-content');
+            content.textContent = text;
+            modal.classList.remove('hidden');
+        }
+
+        function hideFullResponse() {
+            const modal = document.getElementById('full-response-modal');
+            modal.classList.add('hidden');
+        }
+
+        document.getElementById('full-response-modal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('full-response-modal')) {
+                hideFullResponse();
             }
         });
     </script>

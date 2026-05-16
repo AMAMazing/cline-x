@@ -81,6 +81,25 @@
                          data-title="{{ win.full_title }}" 
                          onclick="focusProject(this.dataset.title)">
                         
+                        {% if win.path %}
+                        <button class="absolute top-2 right-2 p-1.5 rounded-full hover:bg-blue-500/10 hover:text-blue-400 text-gray-700 opacity-0 group-hover:opacity-100 transition-all z-10"
+                             title="Edit Dev Link" 
+                             data-path="{{ win.path }}"
+                             data-link="{{ win.dev_link }}"
+                             onclick="editDevLink(event, this)">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                        </button>
+                        {% endif %}
+
+                        {% if win.dev_link %}
+                        <button class="absolute bottom-3 right-3 p-2 bg-[#1a1a1a] border border-green-900/30 hover:border-green-500/50 hover:bg-green-500/10 text-green-400 rounded-xl transition-all z-10 shadow-lg group/link"
+                             title="Open Dev Link: {{ win.dev_link }}" 
+                             data-link="{{ win.dev_link }}"
+                             onclick="openDevLink(event, this)">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover/link:scale-110 transition-transform"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
+                        </button>
+                        {% endif %}
+                        
                         {{ render_icon(win.has_icon, win.path, True) }}
                         
                         <div class="text-sm font-medium text-gray-300 group-hover:text-green-400 text-center line-clamp-2 transition-colors">
@@ -107,6 +126,23 @@
                              onclick="ignoreProject(event, this)">
                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                         </button>
+
+                        <button class="absolute top-2 right-8 p-1.5 rounded-full hover:bg-blue-500/10 hover:text-blue-400 text-gray-700 opacity-0 group-hover:opacity-100 transition-all z-10"
+                             title="Edit Dev Link" 
+                             data-path="{{ project.path }}"
+                             data-link="{{ project.dev_link }}"
+                             onclick="editDevLink(event, this)">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                        </button>
+
+                        {% if project.dev_link %}
+                        <button class="absolute bottom-3 right-3 p-2 bg-[#1a1a1a] border border-gray-800 hover:border-blue-500/50 hover:bg-blue-500/10 text-blue-400 rounded-xl transition-all z-10 shadow-lg group/link"
+                             title="Open Dev Link: {{ project.dev_link }}" 
+                             data-link="{{ project.dev_link }}"
+                             onclick="openDevLink(event, this)">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover/link:scale-110 transition-transform"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
+                        </button>
+                        {% endif %}
 
                         {{ render_icon(project.has_icon, project.path) }}
                         
@@ -171,6 +207,46 @@
 
         function hideProcessing() {
             document.getElementById('processing-overlay').classList.add('hidden');
+        }
+
+        // --- Dev Link Logic ---
+        async function editDevLink(event, element) {
+            event.stopPropagation();
+            const path = element.dataset.path;
+            if (!path || path === "undefined") {
+                alert("This project does not have a valid path linked.");
+                return;
+            }
+            const currentLink = element.dataset.link || "";
+            
+            const newLink = prompt("Enter development link for this project (leave blank to remove):", currentLink);
+            if (newLink === null) return; // Cancelled
+            
+            try {
+                showProcessing();
+                const response = await fetch('/api/project_link', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body: JSON.stringify({ path: path, link: newLink.trim() }),
+                });
+                if((await response.json()).status === 'success') {
+                    location.reload(); 
+                } else {
+                    hideProcessing();
+                }
+            } catch (error) { 
+                console.error('Error:', error); 
+                hideProcessing();
+            }
+        }
+
+        function openDevLink(event, element) {
+            event.stopPropagation();
+            let link = element.dataset.link;
+            if (link && !link.startsWith('http://') && !link.startsWith('https://')) {
+                link = 'http://' + link;
+            }
+            window.open(link, '_blank');
         }
 
         // --- Search Logic ---
@@ -280,11 +356,34 @@
                         : `<div class="text-green-400"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-8 h-8"><path stroke-linecap="round" stroke-linejoin="round" d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" /></svg></div>`;
                     
                     let safeTitle = win.full_title.replace(/"/g, '"');
+                    let safePath = win.path ? win.path.replace(/"/g, '"') : '';
+                    let devLinkAttr = win.dev_link ? win.dev_link.replace(/"/g, '"') : '';
                     
+                    let editLinkBtn = win.path ? `
+                        <button class="absolute top-2 right-2 p-1.5 rounded-full hover:bg-blue-500/10 hover:text-blue-400 text-gray-700 opacity-0 group-hover:opacity-100 transition-all z-10"
+                             title="Edit Dev Link" 
+                             data-path="${safePath}"
+                             data-link="${devLinkAttr}"
+                             onclick="editDevLink(event, this)">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                        </button>
+                    ` : '';
+
+                    let openLinkBtn = win.dev_link ? `
+                        <button class="absolute bottom-3 right-3 p-2 bg-[#1a1a1a] border border-green-900/30 hover:border-green-500/50 hover:bg-green-500/10 text-green-400 rounded-xl transition-all z-10 shadow-lg group/link"
+                             title="Open Dev Link: ${devLinkAttr}" 
+                             data-link="${devLinkAttr}"
+                             onclick="openDevLink(event, this)">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover/link:scale-110 transition-transform"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
+                        </button>
+                    ` : '';
+
                     return `
                     <div class="group relative bg-[#111] border border-green-900/30 hover:border-green-500/50 rounded-2xl p-6 shadow-lg hover:shadow-green-900/10 transition-all cursor-pointer flex flex-col items-center justify-center gap-3 h-40"
                          data-title="${safeTitle}" 
                          onclick="focusProject(this.dataset.title)">
+                        ${editLinkBtn}
+                        ${openLinkBtn}
                         ${iconHtml}
                         <div class="text-sm font-medium text-gray-300 group-hover:text-green-400 text-center line-clamp-2 transition-colors">
                             ${win.name}

@@ -90,9 +90,11 @@ global_last_reply = ""
 chat_history = []
 MAX_CHAT_HISTORY = 50
 
-def add_chat_message(role, text):
+def add_chat_message(role, text, full_text=None):
     global chat_history
     message = {'role': role, 'text': text, 'time': time.strftime('%H:%M')}
+    if full_text:
+        message['full_text'] = full_text
     chat_history.append(message)
     if len(chat_history) > MAX_CHAT_HISTORY:
         chat_history.pop(0)
@@ -252,6 +254,26 @@ def get_all_projects_with_ignore_state():
     projects.sort(key=lambda x: not x.get('is_ignored', False))
             
     return projects
+
+# --- PROJECT LINKS PERSISTENCE ---
+PROJECT_LINKS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'project_links.json')
+
+def load_project_links():
+    if os.path.exists(PROJECT_LINKS_FILE):
+        try:
+            with open(PROJECT_LINKS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Error loading project links: {e}")
+            return {}
+    return {}
+
+def save_project_links(links_data):
+    try:
+        with open(PROJECT_LINKS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(links_data, f, indent=4)
+    except Exception as e:
+        logger.error(f"Error saving project links: {e}")
 
 # --- FLASK ROUTES ---
 @app.route('/', methods=['GET'])
@@ -546,6 +568,12 @@ def chat_completions():
         summary_match = re.search(r"<summary>(.*?)</summary>", response, re.DOTALL)
         summary = summary_match.group(1).strip() if summary_match else None
 
+        added_to_chat = False
+        def chat_adder_with_full_text(r, t):
+            nonlocal added_to_chat
+            add_chat_message(r, t, full_text=response)
+            added_to_chat = True
+
         global global_completion_status, global_last_reply
         if has_completion:
             global_completion_status = True
@@ -555,7 +583,7 @@ def chat_completions():
         elif summary:
             global_last_reply = summary
             if terminal_alert_level == 'all':
-                print_summary_alert(summary, add_chat_message)
+                print_summary_alert(summary, chat_adder_with_full_text)
 
         ntfy_topic = config.get('ntfy_topic', '')
         if ntfy_notification_level == 'all':
@@ -564,7 +592,7 @@ def chat_completions():
                     topic=ntfy_topic,
                     simple_title="Cline-X: Task Completion",
                     full_content=summary or "Task completion submitted.",
-                    add_chat_message_func=add_chat_message,
+                    add_chat_message_func=chat_adder_with_full_text,
                     tags="tada"
                 )
             elif summary:
@@ -572,7 +600,7 @@ def chat_completions():
                     topic=ntfy_topic,
                     simple_title="[INFO] Cline-X: AI Response",
                     full_content=summary,
-                    add_chat_message_func=add_chat_message,
+                    add_chat_message_func=chat_adder_with_full_text,
                     tags="robot_face"
                 )
         elif ntfy_notification_level == 'completion' and has_completion:
@@ -580,9 +608,12 @@ def chat_completions():
                 topic=ntfy_topic,
                 simple_title="Cline-X: Task Completion",
                 full_content=response,
-                add_chat_message_func=add_chat_message,
+                add_chat_message_func=chat_adder_with_full_text,
                 tags="tada"
             )
+
+        if not added_to_chat:
+            chat_adder_with_full_text('assistant', summary if summary else ("Task completed successfully." if has_completion else "Processed response."))
         
         if is_streaming:
             def generate():
@@ -614,14 +645,37 @@ def chat_completions():
 @limiter.exempt
 def dashboard():
     all_projects = get_all_projects_with_ignore_state()
+    links = load_project_links()
+    for p in all_projects:
+        p_path = p.get('path')
+        if p_path:
+            norm_path = os.path.normcase(os.path.normpath(p_path))
+            p['dev_link'] = links.get(norm_path, "")
+            
     projects_data = [p for p in all_projects if not p.get('is_ignored')]
+    
     active_windows = filter_ignored_projects(get_ui_active_windows())
+    for win in active_windows:
+        p_path = win.get('path')
+        if p_path:
+            norm_path = os.path.normcase(os.path.normpath(p_path))
+            win['dev_link'] = links.get(norm_path, "")
+        else:
+            win['dev_link'] = ""
+            
     return render_template('dashboard.html', projects=projects_data, active_windows=active_windows, all_projects=all_projects)
 
 @app.route('/multi_project')
 @limiter.exempt
 def multi_project():
     all_projects = get_all_projects_with_ignore_state()
+    links = load_project_links()
+    for p in all_projects:
+        p_path = p.get('path')
+        if p_path:
+            norm_path = os.path.normcase(os.path.normpath(p_path))
+            p['dev_link'] = links.get(norm_path, "")
+            
     projects_data = [p for p in all_projects if not p.get('is_ignored')]
     return render_template('multi_project.html', projects=projects_data, all_projects=all_projects)
 
@@ -643,7 +697,42 @@ def chat():
 @app.route('/api/active')
 @limiter.exempt
 def api_active():
-    return jsonify(filter_ignored_projects(get_ui_active_windows()))
+    active = filter_ignored_projects(get_ui_active_windows())
+    links = load_project_links()
+    for win in active:
+        p_path = win.get('path')
+        if p_path:
+            norm_path = os.path.normcase(os.path.normpath(p_path))
+            win['dev_link'] = links.get(norm_path, "")
+        else:
+            win['dev_link'] = ""
+    return jsonify(active)
+
+@app.route('/api/project_link', methods=['POST'])
+@limiter.exempt
+def update_project_link():
+    try:
+        data = request.get_json()
+        path = data.get('path')
+        link = data.get('link')
+        
+        if not path:
+            return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
+            
+        links = load_project_links()
+        norm_path = os.path.normcase(os.path.normpath(path))
+        
+        if link:
+            links[norm_path] = link
+        else:
+            if norm_path in links:
+                del links[norm_path]
+                
+        save_project_links(links)
+        return jsonify({'status': 'success', 'message': 'Project link updated'})
+    except Exception as e:
+        logger.error(f"Error updating project link: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/screenshot')
 @limiter.exempt
