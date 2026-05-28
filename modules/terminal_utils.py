@@ -112,6 +112,11 @@ def print_startup_banner(current_model, current_theme, terminal_log_level, termi
    {colorama.Fore.WHITE}Unified Rules: {colorama.Fore.CYAN + colorama.Style.BRIGHT}{clickable_rules_path}{colorama.Style.RESET_ALL}
    {colorama.Style.DIM}(Ctrl+Click the path above to edit rules directly){colorama.Style.RESET_ALL}
 
+{colorama.Fore.YELLOW + colorama.Style.BRIGHT}[GUI] DESKTOP PANEL:{colorama.Style.RESET_ALL}
+   {colorama.Fore.WHITE}Launch the resizable desktop GUI:{colorama.Style.RESET_ALL}
+   {colorama.Fore.CYAN + colorama.Style.BRIGHT + colorama.Back.BLACK}  http://127.0.0.1:3001/gui  {colorama.Style.RESET_ALL}
+   {colorama.Style.DIM}(Ctrl+Click the link above to open the Chat & Queue GUI panel){colorama.Style.RESET_ALL}
+
 {colorama.Fore.YELLOW + colorama.Style.BRIGHT}[PANEL] CONTROL PANEL:{colorama.Style.RESET_ALL}
    {colorama.Fore.WHITE}Open your browser and go to:{colorama.Style.RESET_ALL}
    {colorama.Fore.CYAN + colorama.Style.BRIGHT + colorama.Back.BLACK}  http://127.0.0.1:3001  {colorama.Style.RESET_ALL}

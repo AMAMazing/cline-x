@@ -18,6 +18,7 @@ import colorama
 import subprocess
 from datetime import timedelta
 import pyautogui
+import threading
 
 from optimisewait import optimiseWait, set_autopath, set_altpath
 from talktollm import talkto
@@ -85,6 +86,40 @@ alert_state = {'lines_printed': 0, 'active': False}
 # --- Batch Process State ---
 global_completion_status = False
 global_last_reply = ""
+
+# --- Task Queue State ---
+task_queue = []
+current_queue_task = None
+queue_lock = threading.Lock()
+
+def process_next_queue_item():
+    global task_queue, current_queue_task, global_completion_status, global_last_reply
+    with queue_lock:
+        if not task_queue:
+            current_queue_task = None
+            return
+        current_queue_task = task_queue.pop(0)
+    
+    try:
+        project_path = current_queue_task.get('project_path')
+        message = current_queue_task.get('message')
+        
+        vscode_exe = find_vscode_executable()
+        if vscode_exe and project_path and os.path.isdir(project_path):
+            subprocess.Popen([vscode_exe, project_path], creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+            project_name = os.path.basename(project_path)
+            wait_for_vscode_window(project_name)
+        
+        time.sleep(1) # Extra stability wait
+        
+        global_completion_status = False
+        global_last_reply = ""
+        add_chat_message('user', message)
+        process_optimisewait_message(message)
+    except Exception as e:
+        logger.error(f"Error processing queue item: {e}")
+        current_queue_task = None
+        threading.Thread(target=process_next_queue_item, daemon=True).start()
 
 # --- Chat History for Web Interface ---
 chat_history = []
@@ -580,6 +615,10 @@ def chat_completions():
             global_last_reply = summary if summary else "Task completed successfully."
             if terminal_alert_level in ['completions', 'all']:
                 print_completion_alert(alert_state)
+            
+            # TRIGGER QUEUE NEXT ITEM
+            threading.Thread(target=process_next_queue_item, daemon=True).start()
+            
         elif summary:
             global_last_reply = summary
             if terminal_alert_level == 'all':
@@ -770,7 +809,7 @@ def launch():
     
     if vscode_exe and project_path and os.path.isdir(project_path):
         try:
-            subprocess.Popen([vscode_exe, project_path], creationflags=subprocess.CREATE_NO_WINDOW)
+            subprocess.Popen([vscode_exe, project_path], creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
             project_name = os.path.basename(project_path)
             wait_for_vscode_window(project_name)
             return jsonify({'status': 'success', 'message': 'Opening...', 'project_name': project_name})
@@ -869,6 +908,45 @@ def multi_project_state_route():
 @limiter.exempt
 def get_messages():
     return jsonify(chat_history)
+
+@app.route('/gui')
+@limiter.exempt
+def launch_gui_route():
+    try:
+        gui_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gui_app.py')
+        subprocess.Popen([sys.executable, gui_script_path], creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        return "<html><body style='background:#111;color:#eee;font-family:sans-serif;'><h2 style='text-align:center;margin-top:20%;'>GUI Launched!</h2><p style='text-align:center;'>You can close this tab and return to the desktop application.</p><script>setTimeout(()=>window.close(),3000);</script></body></html>"
+    except Exception as e:
+        return str(e), 500
+
+@app.route('/api/projects_list')
+@limiter.exempt
+def api_projects_list():
+    projects = get_ui_projects_data()
+    return jsonify(projects)
+
+@app.route('/api/queue', methods=['GET', 'POST'])
+@limiter.exempt
+@csrf.exempt
+def api_queue():
+    global task_queue, current_queue_task
+    if request.method == 'GET':
+        return jsonify({'queue': task_queue, 'current': current_queue_task})
+    elif request.method == 'POST':
+        data = request.json
+        task = {
+            'id': secrets.token_hex(8),
+            'project_path': data.get('project_path'),
+            'project_name': data.get('project_name'),
+            'message': data.get('message')
+        }
+        with queue_lock:
+            task_queue.append(task)
+            
+        if current_queue_task is None:
+            threading.Thread(target=process_next_queue_item, daemon=True).start()
+            
+        return jsonify({'status': 'success', 'task': task})
 
 ngrok_tunnel = None
 
