@@ -45,13 +45,10 @@
     <div class="relative z-10 max-w-3xl mx-auto px-6 py-12">
         <div class="mb-10">
             <div class="bg-[#111] border border-gray-800 rounded-2xl p-6 shadow-xl hover:border-gray-700 transition-all">
-                <h3 class="text-sm font-medium text-gray-400 mb-4 uppercase tracking-wider">🔗 Cline Link</h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <h3 class="text-sm font-medium text-gray-400 mb-4 uppercase tracking-wider">🔗 Agent Access</h3>
+                <div class="grid grid-cols-1 gap-4">
                     <button onclick="window.location.href='/dashboard'" class="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-semibold py-3 px-6 rounded-xl transition-all shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2">
-                        Single-Project Agent
-                    </button>
-                    <button onclick="window.location.href='/multi_project'" class="w-full bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-semibold py-3 px-6 rounded-xl transition-all shadow-lg shadow-teal-900/20 flex items-center justify-center gap-2">
-                        Multi-Project Agent (Beta)
+                        Cline Link
                     </button>
                 </div>
             </div>
@@ -124,6 +121,17 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Queue Timeout Section -->
+            <div class="bg-[#111] border border-gray-800 rounded-2xl p-6 shadow-xl">
+                <h3 class="text-sm font-medium text-gray-400 mb-4 uppercase tracking-wider">Queue Timeout</h3>
+                <div class="flex gap-2 p-1 bg-gray-800/50 rounded-xl border border-gray-700/50 mb-2" id="timeout-level-group">
+                    <button class="flex-1 py-2 px-2 rounded-lg text-xs font-medium transition-all {{ 'bg-gray-700 text-white shadow-sm' if queue_timeout_minutes == 5 else 'text-gray-400 hover:text-white hover:bg-gray-700/50' }} model-btn" onclick="setTimeoutPref(this, 5)">5 Min</button>
+                    <button class="flex-1 py-2 px-2 rounded-lg text-xs font-medium transition-all {{ 'bg-gray-700 text-white shadow-sm' if queue_timeout_minutes == 10 else 'text-gray-400 hover:text-white hover:bg-gray-700/50' }} model-btn" onclick="setTimeoutPref(this, 10)">10 Min</button>
+                    <button class="flex-1 py-2 px-2 rounded-lg text-xs font-medium transition-all {{ 'bg-gray-700 text-white shadow-sm' if queue_timeout_minutes == 15 else 'text-gray-400 hover:text-white hover:bg-gray-700/50' }} model-btn" onclick="setTimeoutPref(this, 15)">15 Min</button>
+                </div>
+                <p class="text-[10px] text-gray-600 mt-1">Wait time for active task completion.</p>
+            </div>
         </div>
 
         <div class="mt-6 bg-[#111] border border-gray-800 rounded-2xl p-6 shadow-xl opacity-75 hover:opacity-100 transition-opacity">
@@ -191,7 +199,7 @@
                         </div>
                         <button onclick="copyToClipboard('{{ api_key }}', this)" class="ml-2 text-gray-500 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-700/50 flex-shrink-0" title="Copy Key">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                             </svg>
                         </button>
                     </div>
@@ -323,6 +331,18 @@
                     'X-CSRFToken': getCsrfToken()
                 },
                 body: JSON.stringify({'level': level})
+            });
+        }
+
+        function setTimeoutPref(btn, minutes) {
+            updateActiveBtn('timeout-level-group', btn);
+            fetch('/api/timeout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify({'timeout': minutes})
             });
         }
 

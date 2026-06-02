@@ -1,38 +1,60 @@
 {% from "components/icon.html" import render as render_icon %}
 <header class="relative z-20 flex items-center justify-between px-8 py-6 bg-[#0A0A0A]/50 backdrop-blur-xl border-b border-gray-800/50">
-    <div class="flex items-center gap-5">
+    <div class="flex items-center gap-5 flex-1 min-w-0">
         {% if show_back_button %}
-        <a href="{{ back_url }}" class="p-2.5 rounded-xl bg-gray-800/50 hover:bg-gray-800 text-gray-400 hover:text-white transition-all border border-gray-700/50 group/back">
+        <a href="{{ back_url }}" class="p-2.5 rounded-xl bg-gray-800/50 hover:bg-gray-800 text-gray-400 hover:text-white transition-all border border-gray-700/50 group/back shrink-0">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="group-hover/back:-translate-x-0.5 transition-transform"><path d="m15 18-6-6 6-6"/></svg>
         </a>
         {% endif %}
         
-        <div class="flex items-center gap-4">
-            <div class="w-12 h-12 rounded-2xl bg-gradient-to-br {{ icon_gradient|default('from-blue-600 to-indigo-600') }} p-0.5 shadow-lg shadow-blue-900/20">
-                <div class="w-full h-full rounded-[14px] bg-[#0A0A0A] flex items-center justify-center overflow-hidden">
-                    {% if project_icon_url %}
-                        <img src="{{ project_icon_url }}" class="w-full h-full object-contain" alt="Project Icon">
-                    {% elif header_icon_svg %}
-                        {{ header_icon_svg|safe }}
-                    {% else %}
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-7 h-7 text-blue-400">
-                            <path d="M11.47 3.84a.75.75 0 011.06 0l8.69 8.69a.75.75 0 101.06-1.06l-8.69-8.69a2.25 2.25 0 00-3.18 0l-8.69 8.69a.75.75 0 001.06 1.06l8.69-8.69z" />
-                            <path d="M12 5.432l8.159 8.159c.03.03.06.058.091.086v6.198c0 1.035-.84 1.875-1.875 1.875H15a.75.75 0 01-.75-.75v-4.5a.75.75 0 00-.75-.75h-3a.75.75 0 00-.75.75V21a.75.75 0 01-.75.75H5.625a1.875 1.875 0 01-1.875-1.875v-6.198a2.29 2.29 0 00.091-.086L12 5.432z" />
-                        </svg>
-                    {% endif %}
+        <div class="flex items-center gap-4 flex-1 min-w-0">
+            {% if is_chat_header %}
+                <div class="relative bg-[#111] border border-gray-800 rounded-xl p-1.5 shadow-md w-full max-w-sm" id="dropdown-container">
+                    <div class="relative flex items-center gap-2 bg-[#0A0A0A] border border-gray-800 rounded-lg p-1.5 focus-within:border-blue-500/50 transition-all">
+                        <div id="project-icon-preview" class="w-8 h-8 flex shrink-0 items-center justify-center bg-gray-900 rounded-md">
+                            {% if project_has_icon %}
+                                <img src="{{ url_for('get_icon', path=project_path) }}" class="w-5 h-5 object-contain">
+                            {% else %}
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-gray-600"><path d="M19.5 21a3 3 0 0 0 3-3V9a3 3 0 0 0-3-3h-5.379a.75.75 0 0 1-.53-.22L11.47 3.66A2.25 2.25 0 0 0 9.879 3H4.5a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h15Z" /><path fill-opacity="0.5" d="M1.5 10.5V18a3 3 0 0 0 3 3h15a3 3 0 0 0 3-3v-7.5H1.5Z" /></svg>
+                            {% endif %}
+                        </div>
+                        <div class="flex-1 relative min-w-0">
+                            <input type="hidden" id="project-path-input" value="{{ project_path }}">
+                            <input type="text" id="project-search-input" value="{{ project_name }}" class="w-full bg-transparent text-sm text-gray-100 placeholder-gray-600 outline-none truncate" placeholder="Search workspace..." autocomplete="off">
+                        </div>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-gray-600 mr-2 shrink-0"><path d="m6 9 6 6 6-6"/></svg>
+                    </div>
+                    <div id="search-dropdown" class="absolute top-full left-0 mt-2 w-[300px] bg-[#111] border border-gray-800 rounded-2xl shadow-2xl z-[100] hidden overflow-hidden max-h-[250px]">
+                        <div id="search-results-list" class="overflow-y-auto py-2"></div>
+                    </div>
                 </div>
-            </div>
-            <div>
-                <h1 class="text-lg font-bold text-white tracking-tight">{{ header_title }}</h1>
-                <div class="flex items-center gap-2 mt-0.5">
-                    <span class="w-1.5 h-1.5 rounded-full {{ subtitle_bg|default('bg-blue-500') }} animate-pulse"></span>
-                    <span class="text-[10px] font-bold {{ subtitle_color|default('text-blue-400') }} uppercase tracking-widest">{{ header_subtitle }}</span>
+            {% else %}
+                <div class="w-12 h-12 rounded-2xl bg-gradient-to-br {{ icon_gradient|default('from-blue-600 to-indigo-600') }} p-0.5 shadow-lg shadow-blue-900/20 shrink-0">
+                    <div class="w-full h-full rounded-[14px] bg-[#0A0A0A] flex items-center justify-center overflow-hidden">
+                        {% if project_icon_url %}
+                            <img src="{{ project_icon_url }}" class="w-full h-full object-contain" alt="Project Icon">
+                        {% elif header_icon_svg %}
+                            {{ header_icon_svg|safe }}
+                        {% else %}
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-7 h-7 text-blue-400">
+                                <path d="M11.47 3.84a.75.75 0 011.06 0l8.69 8.69a.75.75 0 101.06-1.06l-8.69-8.69a2.25 2.25 0 00-3.18 0l-8.69 8.69a.75.75 0 001.06 1.06l8.69-8.69z" />
+                                <path d="M12 5.432l8.159 8.159c.03.03.06.058.091.086v6.198c0 1.035-.84 1.875-1.875 1.875H15a.75.75 0 01-.75-.75v-4.5a.75.75 0 00-.75-.75h-3a.75.75 0 00-.75.75V21a.75.75 0 01-.75.75H5.625a1.875 1.875 0 01-1.875-1.875v-6.198a2.29 2.29 0 00.091-.086L12 5.432z" />
+                            </svg>
+                        {% endif %}
+                    </div>
                 </div>
-            </div>
+                <div class="min-w-0">
+                    <h1 class="text-lg font-bold text-white tracking-tight truncate">{{ header_title }}</h1>
+                    <div class="flex items-center gap-2 mt-0.5">
+                        <span class="w-1.5 h-1.5 rounded-full {{ subtitle_bg|default('bg-blue-500') }} animate-pulse shrink-0"></span>
+                        <span class="text-[10px] font-bold {{ subtitle_color|default('text-blue-400') }} uppercase tracking-widest truncate">{{ header_subtitle }}</span>
+                    </div>
+                </div>
+            {% endif %}
         </div>
     </div>
 
-    <div class="flex items-center gap-3">
+    <div class="flex items-center gap-3 shrink-0">
         {% if show_ignored_button %}
         <button onclick="openIgnoredModal()" class="p-2.5 rounded-xl bg-gray-800/50 hover:bg-gray-800 text-gray-400 hover:text-white transition-all border border-gray-700/50 group" title="Select Ignored Projects">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="group-hover:text-blue-400 transition-colors"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>

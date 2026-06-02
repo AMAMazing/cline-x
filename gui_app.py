@@ -281,10 +281,14 @@ class ClineXGUI(QMainWindow):
     def update_queue(self, data):
         current = data.get('current')
         queue = data.get('queue', [])
+        system_busy = data.get('system_busy', False)
 
         if current:
             self.current_lbl.setText(f"RUNNING: {current['project_name'].upper()}")
             self.current_lbl.setStyleSheet("color: #8b5cf6; font-size: 11px; letter-spacing: 1px;")
+        elif system_busy:
+            self.current_lbl.setText("STATUS: BUSY (ACTIVE TASK)")
+            self.current_lbl.setStyleSheet("color: #f59e0b; font-size: 11px; letter-spacing: 1px;")
         else:
             self.current_lbl.setText("STATUS: IDLE")
             self.current_lbl.setStyleSheet("color: #10b981; font-size: 11px; letter-spacing: 1px;")

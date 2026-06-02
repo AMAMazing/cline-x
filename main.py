@@ -20,7 +20,7 @@ from datetime import timedelta
 import pyautogui
 import threading
 
-from optimisewait import optimiseWait, set_autopath, set_altpath
+from optimisewait import set_autopath, set_altpath
 from talktollm import talkto
 from typing import Union, List, Dict
 
@@ -34,6 +34,13 @@ from modules.terminal_utils import clear_previous_alert, print_completion_alert,
 from modules.notify_utils import send_ntfy_notification
 from modules.project_utils import get_ui_projects_data, get_ui_active_windows, get_project_icon_info
 from modules.window_manager import focus_and_maximize_window, wait_for_vscode_window
+
+# --- Newly Extracted Modules ---
+from modules.chat_manager import add_chat_message, chat_history
+from modules.llm_utils import get_content_text
+from modules.automation_utils import process_optimisewait_message
+from modules.project_manager import (load_project_links, save_project_links, 
+                                     filter_ignored_projects, get_all_projects_with_ignore_state)
 
 # Fix for Windows Unicode Output
 if sys.platform.startswith('win'):
@@ -87,18 +94,42 @@ alert_state = {'lines_printed': 0, 'active': False}
 global_completion_status = False
 global_last_reply = ""
 
+# --- System Busy State ---
+system_busy = False
+
 # --- Task Queue State ---
 task_queue = []
 current_queue_task = None
 queue_lock = threading.Lock()
 
 def process_next_queue_item():
-    global task_queue, current_queue_task, global_completion_status, global_last_reply
-    with queue_lock:
-        if not task_queue:
-            current_queue_task = None
-            return
-        current_queue_task = task_queue.pop(0)
+    global task_queue, current_queue_task, global_completion_status, global_last_reply, system_busy
+    
+    timeout_minutes = int(config.get('queue_timeout_minutes', 5))
+    wait_timeout = timeout_minutes * 60
+    start_wait = time.time()
+    
+    while True:
+        # Wait if the system is currently processing any LLM interaction
+        while system_busy:
+            if time.time() - start_wait > wait_timeout:
+                logger.warning("Queue wait timeout exceeded, proceeding with next task.")
+                system_busy = False
+                break
+            time.sleep(2)
+            
+        with queue_lock:
+            # Re-check inside lock to ensure another thread didn't beat us
+            if system_busy:
+                continue
+                
+            if not task_queue:
+                current_queue_task = None
+                return
+                
+            current_queue_task = task_queue.pop(0)
+            system_busy = True
+            break # Got the task, exit the polling loop
     
     try:
         project_path = current_queue_task.get('project_path')
@@ -115,24 +146,12 @@ def process_next_queue_item():
         global_completion_status = False
         global_last_reply = ""
         add_chat_message('user', message)
-        process_optimisewait_message(message)
+        process_optimisewait_message(message, debug=(terminal_log_level == 'debug'))
     except Exception as e:
         logger.error(f"Error processing queue item: {e}")
+        system_busy = False
         current_queue_task = None
         threading.Thread(target=process_next_queue_item, daemon=True).start()
-
-# --- Chat History for Web Interface ---
-chat_history = []
-MAX_CHAT_HISTORY = 50
-
-def add_chat_message(role, text, full_text=None):
-    global chat_history
-    message = {'role': role, 'text': text, 'time': time.strftime('%H:%M')}
-    if full_text:
-        message['full_text'] = full_text
-    chat_history.append(message)
-    if len(chat_history) > MAX_CHAT_HISTORY:
-        chat_history.pop(0)
 
 # --- API Key (only used when auth_required is True) ---
 API_KEY = secrets.token_urlsafe(32)
@@ -172,34 +191,7 @@ MIN_REQUEST_INTERVAL = 5
 set_autopath(r"D:\cline-x-claudeweb\images")
 set_altpath(r"D:\cline-x-claudeweb\images\alt1440")
 
-def process_optimisewait_message(message):
-    optimiseWait('newchat', autopath='linkimages')
-    optimiseWait('taskhere', autopath='linkimages')
-    
-    set_clipboard(message, debug=(terminal_log_level == 'debug'))
-    time.sleep(0.1)
-    
-    pyautogui.hotkey('ctrl', 'v')
-    time.sleep(0.1) 
-    pyautogui.press('enter')
-
 # --- CORE LOGIC ---
-def get_content_text(content: Union[str, List[Dict[str, str]], Dict[str, str]]) -> str:
-    if isinstance(content, str):
-        return content
-    elif isinstance(content, list):
-        parts = []
-        for item in content:
-            if item.get("type") == "text":
-                parts.append(item["text"])
-            elif item.get("type") == "image_url":
-                image_data = item.get("image_url", {}).get("url", "")
-                if image_data.startswith('data:image'):
-                    set_clipboard_image(image_data, debug=(terminal_log_level == 'debug'))
-                parts.append(f"[Image: An uploaded image]")
-        return "\n".join(parts)
-    return ""
-
 def handle_llm_interaction(prompt):
     global last_request_time
     clear_previous_alert(alert_state)
@@ -244,72 +236,6 @@ def handle_llm_interaction(prompt):
     debug_mode = (terminal_log_level == 'debug')
     return talkto(current_model, full_prompt, image_list, debug=debug_mode)
 
-def filter_ignored_projects(items):
-    ignored = load_ignored_folders()
-    if not ignored:
-        return items
-    ignored_norm = [os.path.normcase(os.path.normpath(p)) for p in ignored]
-    return [item for item in items if not item.get('path') or os.path.normcase(os.path.normpath(item['path'])) not in ignored_norm]
-
-def get_all_projects_with_ignore_state():
-    projects = get_ui_projects_data()
-    ignored = load_ignored_folders()
-    
-    if not ignored:
-        for p in projects:
-            p['is_ignored'] = False
-        return projects
-        
-    ignored_norm = [os.path.normcase(os.path.normpath(p)) for p in ignored]
-    project_paths_norm = set()
-    
-    for p in projects:
-        p_path = p.get('path')
-        if p_path:
-            norm_p = os.path.normcase(os.path.normpath(p_path))
-            p['is_ignored'] = norm_p in ignored_norm
-            project_paths_norm.add(norm_p)
-        else:
-            p['is_ignored'] = False
-            
-    # Add any ignored folders that are not currently in the projects list (because they were filtered out upstream)
-    for ig_path in ignored:
-        norm_ig = os.path.normcase(os.path.normpath(ig_path))
-        if norm_ig not in project_paths_norm:
-            icon_path = find_project_icon(ig_path)
-            projects.append({
-                'name': os.path.basename(ig_path) or ig_path,
-                'path': ig_path,
-                'has_icon': bool(icon_path and os.path.exists(icon_path)),
-                'is_ignored': True
-            })
-            project_paths_norm.add(norm_ig)
-            
-    # Sort projects so that ignored ones appear at the beginning, preserving existing order otherwise.
-    projects.sort(key=lambda x: not x.get('is_ignored', False))
-            
-    return projects
-
-# --- PROJECT LINKS PERSISTENCE ---
-PROJECT_LINKS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'project_links.json')
-
-def load_project_links():
-    if os.path.exists(PROJECT_LINKS_FILE):
-        try:
-            with open(PROJECT_LINKS_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f"Error loading project links: {e}")
-            return {}
-    return {}
-
-def save_project_links(links_data):
-    try:
-        with open(PROJECT_LINKS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(links_data, f, indent=4)
-    except Exception as e:
-        logger.error(f"Error saving project links: {e}")
-
 # --- FLASK ROUTES ---
 @app.route('/', methods=['GET'])
 @limiter.exempt
@@ -322,6 +248,7 @@ def home():
                            terminal_log_level=terminal_log_level,
                            terminal_alert_level=terminal_alert_level,
                            ntfy_notification_level=ntfy_notification_level,
+                           queue_timeout_minutes=int(config.get('queue_timeout_minutes', 5)),
                            config=config,
                            tunnel_active=tunnel_active,
                            auth_required=auth_required,
@@ -585,6 +512,8 @@ def open_rules_file():
 @csrf.exempt
 @limiter.limit("20 per minute")
 def chat_completions():
+    global system_busy
+    system_busy = True
     try:
         clear_previous_alert(alert_state)
         
@@ -592,7 +521,7 @@ def chat_completions():
         if not data or 'messages' not in data:
             return jsonify({'error': {'message': 'Invalid request format'}}), 400
 
-        prompt = get_content_text(data['messages'][-1].get('content', ''))
+        prompt = get_content_text(data['messages'][-1].get('content', ''), debug=(terminal_log_level == 'debug'))
         
         is_streaming = data.get('stream', False)
         response = handle_llm_interaction(prompt)
@@ -611,6 +540,7 @@ def chat_completions():
 
         global global_completion_status, global_last_reply
         if has_completion:
+            system_busy = False
             global_completion_status = True
             global_last_reply = summary if summary else "Task completed successfully."
             if terminal_alert_level in ['completions', 'all']:
@@ -829,7 +759,7 @@ def focus():
 @app.route('/send_message', methods=['POST'])
 @limiter.limit("20 per minute")
 def send_message():
-    global global_completion_status, global_last_reply
+    global global_completion_status, global_last_reply, system_busy
     data = request.json
     message = data.get('message')
     
@@ -837,10 +767,11 @@ def send_message():
         return jsonify({'status': 'error', 'message': 'Message cannot be empty'}), 400
 
     try:
+        system_busy = True
         global_completion_status = False
         global_last_reply = ""
         add_chat_message('user', message)
-        process_optimisewait_message(message)
+        process_optimisewait_message(message, debug=(terminal_log_level == 'debug'))
         return jsonify({'status': 'success', 'message': 'Message processed'})
     except Exception as e:
         logger.error(f"Message processing failed: {e}")
@@ -929,9 +860,9 @@ def api_projects_list():
 @limiter.exempt
 @csrf.exempt
 def api_queue():
-    global task_queue, current_queue_task
+    global task_queue, current_queue_task, system_busy
     if request.method == 'GET':
-        return jsonify({'queue': task_queue, 'current': current_queue_task})
+        return jsonify({'queue': task_queue, 'current': current_queue_task, 'system_busy': system_busy})
     elif request.method == 'POST':
         data = request.json
         task = {
@@ -947,6 +878,21 @@ def api_queue():
             threading.Thread(target=process_next_queue_item, daemon=True).start()
             
         return jsonify({'status': 'success', 'task': task})
+
+@app.route('/api/timeout', methods=['POST'])
+@limiter.exempt
+def set_timeout():
+    global config
+    try:
+        data = request.get_json()
+        timeout = int(data.get('timeout', 5))
+        config['queue_timeout_minutes'] = str(timeout)
+        write_config(config)
+        logger.info(f"Queue wait timeout set to: {timeout} minutes")
+        return jsonify({'success': True, 'timeout': timeout})
+    except Exception as e:
+        logger.error(f"Error setting timeout: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 ngrok_tunnel = None
 
