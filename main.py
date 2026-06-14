@@ -234,7 +234,7 @@ def handle_llm_interaction(prompt):
     full_prompt = re.sub(r'data:image\/png;base64,[A-Za-z0-9+\/=]+', '', fullpromptbefore)
 
     debug_mode = (terminal_log_level == 'debug')
-    return talkto(current_model, full_prompt, image_list, debug=debug_mode)
+    return talkto(current_model, full_prompt, image_list, debug=debug_mode,humanize=True, windmouse=True)
 
 # --- FLASK ROUTES ---
 @app.route('/', methods=['GET'])
