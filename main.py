@@ -634,6 +634,11 @@ def dashboard():
             
     return render_template('dashboard.html', projects=projects_data, active_windows=active_windows, all_projects=all_projects)
 
+@app.route('/cline_quest')
+@limiter.exempt
+def cline_quest():
+    return render_template('cline_quest.html')
+
 @app.route('/multi_project')
 @limiter.exempt
 def multi_project():
@@ -839,6 +844,49 @@ def multi_project_state_route():
 @limiter.exempt
 def get_messages():
     return jsonify(chat_history)
+
+@app.route('/restart', methods=['GET'])
+@limiter.exempt
+def restart_server():
+    try:
+        logger.info("Restart command received. Spawning new window and exiting...")
+        
+        def perform_restart():
+            # Allow a short delay for the HTTP response to be sent to the browser
+            time.sleep(0.5)
+            
+            script_path = os.path.abspath(sys.argv[0])
+            
+            if os.name == 'nt':
+                # Wait 2 seconds before starting the new process to ensure port is freed
+                # Use CREATE_NEW_CONSOLE to pop open a new window
+                command = f'timeout /t 2 /nobreak >nul & "{sys.executable}" "{script_path}"'
+                subprocess.Popen(command, shell=True, creationflags=subprocess.CREATE_NEW_CONSOLE)
+            else:
+                command = f'sleep 2 && "{sys.executable}" "{script_path}"'
+                subprocess.Popen(command, shell=True)
+            
+            # Terminate the current application
+            os._exit(0)
+
+        threading.Thread(target=perform_restart, daemon=True).start()
+        
+        # Return a friendly self-refreshing page
+        return """
+        <html>
+            <body style='background:#111;color:#eee;font-family:sans-serif;'>
+                <h2 style='text-align:center;margin-top:20%;'>Restarting...</h2>
+                <p style='text-align:center;color:#888;'>Opening a new window and terminating the current session.</p>
+                <p style='text-align:center;color:#555;'>This page will auto-refresh in 5 seconds.</p>
+                <script>
+                    setTimeout(() => window.location.href='/', 5000);
+                </script>
+            </body>
+        </html>
+        """
+    except Exception as e:
+        logger.error(f"Restart failed: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/gui')
 @limiter.exempt

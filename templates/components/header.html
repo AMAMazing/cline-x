@@ -1,5 +1,5 @@
 {% from "components/icon.html" import render as render_icon %}
-<header class="relative z-20 flex items-center justify-between px-8 py-6 bg-[#0A0A0A]/50 backdrop-blur-xl border-b border-gray-800/50">
+<header class="relative z-40 flex items-center justify-between px-8 py-6 bg-[#0A0A0A]/50 backdrop-blur-xl border-b border-gray-800/50">
     <div class="flex items-center gap-5 flex-1 min-w-0">
         {% if show_back_button %}
         <a href="{{ back_url }}" class="p-2.5 rounded-xl bg-gray-800/50 hover:bg-gray-800 text-gray-400 hover:text-white transition-all border border-gray-700/50 group/back shrink-0">
@@ -9,8 +9,8 @@
         
         <div class="flex items-center gap-4 flex-1 min-w-0">
             {% if is_chat_header %}
-                <div class="relative bg-[#111] border border-gray-800 rounded-xl p-1.5 shadow-md w-full max-w-sm" id="dropdown-container">
-                    <div class="relative flex items-center gap-2 bg-[#0A0A0A] border border-gray-800 rounded-lg p-1.5 focus-within:border-blue-500/50 transition-all">
+                <div class="relative w-full max-w-sm" id="dropdown-container">
+                    <div class="relative flex items-center gap-2 bg-[#111] border border-gray-800 rounded-xl p-2 focus-within:border-blue-500/50 transition-all shadow-sm">
                         <div id="project-icon-preview" class="w-8 h-8 flex shrink-0 items-center justify-center bg-gray-900 rounded-md">
                             {% if project_has_icon %}
                                 <img src="{{ url_for('get_icon', path=project_path) }}" class="w-5 h-5 object-contain">

@@ -54,10 +54,10 @@
     {% endwith %}
 
     <!-- Tabs (Shrink-0) -->
-    <div class="px-4 pt-4 shrink-0 z-30 flex flex-col gap-3 max-w-3xl mx-auto w-full">
+    <div id="tabs-container" class="hidden px-4 pt-4 shrink-0 z-30 flex flex-col gap-3 max-w-3xl mx-auto w-full">
         <div class="flex gap-2 p-1 bg-gray-800/50 rounded-xl border border-gray-700/50">
-            <button id="tab-chat" class="flex-1 py-1.5 rounded-lg text-sm font-medium bg-gray-700 text-white shadow-sm transition-all" onclick="switchTab('chat')">Chat</button>
-            <button id="tab-queue" class="flex-1 py-1.5 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition-all" onclick="switchTab('queue')">Queue</button>
+            <button id="tab-chat" class="flex-1 py-1.5 rounded-lg text-sm font-medium transition-all bg-gray-700 text-white shadow-sm" onclick="switchTab('chat')">Chat</button>
+            <button id="tab-queue" class="hidden flex-1 py-1.5 rounded-lg text-sm font-medium transition-all text-gray-400 hover:text-white" onclick="switchTab('queue')">Queue</button>
         </div>
     </div>
 
@@ -166,6 +166,8 @@
         const searchResults = document.getElementById('search-results-list');
         
         let allProjects = [];
+        let isTaskActive = false;
+        
         const folderSvgSmall = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-gray-600"><path d="M19.5 21a3 3 0 0 0 3-3V9a3 3 0 0 0-3-3h-5.379a.75.75 0 0 1-.53-.22L11.47 3.66A2.25 2.25 0 0 0 9.879 3H4.5a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h15Z" /><path fill-opacity="0.5" d="M1.5 10.5V18a3 3 0 0 0 3 3h15a3 3 0 0 0 3-3v-7.5H1.5Z" /></svg>`;
 
         async function loadProjects() {
@@ -248,13 +250,21 @@
             const viewQueue = document.getElementById('view-queue');
 
             if (tab === 'chat') {
-                btnChat.className = 'flex-1 py-1.5 rounded-lg text-sm font-medium bg-gray-700 text-white shadow-sm transition-all';
-                btnQueue.className = 'flex-1 py-1.5 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition-all';
+                btnChat.classList.add('bg-gray-700', 'text-white', 'shadow-sm');
+                btnChat.classList.remove('text-gray-400', 'hover:text-white');
+                
+                btnQueue.classList.add('text-gray-400', 'hover:text-white');
+                btnQueue.classList.remove('bg-gray-700', 'text-white', 'shadow-sm');
+                
                 viewChat.classList.remove('hidden');
                 viewQueue.classList.add('hidden');
             } else {
-                btnQueue.className = 'flex-1 py-1.5 rounded-lg text-sm font-medium bg-gray-700 text-white shadow-sm transition-all';
-                btnChat.className = 'flex-1 py-1.5 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition-all';
+                btnQueue.classList.add('bg-gray-700', 'text-white', 'shadow-sm');
+                btnQueue.classList.remove('text-gray-400', 'hover:text-white');
+                
+                btnChat.classList.add('text-gray-400', 'hover:text-white');
+                btnChat.classList.remove('bg-gray-700', 'text-white', 'shadow-sm');
+                
                 viewQueue.classList.remove('hidden');
                 viewChat.classList.add('hidden');
             }
@@ -381,7 +391,9 @@
                 if (res.ok) {
                     messageInput.value = '';
                     messageInput.style.height = 'auto';
-                    switchTab('queue');
+                    if (isTaskActive) {
+                        switchTab('queue');
+                    }
                 } else {
                     alert("Failed to add to queue.");
                 }
@@ -405,6 +417,23 @@
                 const statusText = document.getElementById('status-text');
                 const statusInd = document.getElementById('status-indicator');
                 
+                isTaskActive = !!(data.current || data.system_busy);
+                const qLen = (data.queue && data.queue.length) ? data.queue.length : 0;
+                
+                const tabsContainer = document.getElementById('tabs-container');
+                const tabQueue = document.getElementById('tab-queue');
+                
+                if (isTaskActive || qLen > 0) {
+                    tabsContainer.classList.remove('hidden');
+                    tabQueue.classList.remove('hidden');
+                } else {
+                    tabsContainer.classList.add('hidden');
+                    tabQueue.classList.add('hidden');
+                    if (!document.getElementById('view-queue').classList.contains('hidden')) {
+                        switchTab('chat');
+                    }
+                }
+
                 if (data.current) {
                     statusText.textContent = `RUNNING: ${data.current.project_name.toUpperCase()}`;
                     statusText.className = 'text-xs font-bold text-purple-400 tracking-wider';
