@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cline Quest - Cline-X</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -27,6 +27,8 @@
         ::-webkit-scrollbar-track { background: #111; }
         ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #444; }
+        
+        .hidden { display: none !important; }
 
         .glass {
             background: rgba(17, 17, 17, 0.7);
@@ -37,26 +39,796 @@
     </style>
 </head>
 <body class="bg-[#0A0A0A] text-gray-100 min-h-screen font-sans selection:bg-blue-500/30">
+    {% from "components/icon.html" import render as render_icon %}
     <!-- Background Gradients -->
-    <div class="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/5 rounded-full blur-[100px] pointer-events-none z-0"></div>
-    <div class="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/5 rounded-full blur-[100px] pointer-events-none z-0"></div>
+    <div class="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/5 rounded-full blur-[100px] pointer-events-none"></div>
+    <div class="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/5 rounded-full blur-[100px] pointer-events-none"></div>
 
     {% with 
         header_title="Cline Quest",
-        header_subtitle="Interactive Journeys",
+        header_subtitle="Active & Inactive Quests",
         show_back_button=True,
         back_url="/",
-        show_settings=False
+        show_settings=False,
+        show_ignored_button=True,
+        header_icon_svg='<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M15.59 14.37a6 6 0 0 1-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 0 0 6.16-12.12A14.98 14.98 0 0 0 9.631 8.41m5.96 5.96a14.926 14.926 0 0 1-5.841 2.58m-.119-8.54a6 6 0 0 0-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 0 0-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 0 1-2.448-2.448 14.9 14.9 0 0 1 .06-.312m-2.24 2.39a4.493 4.493 0 0 0-1.757 4.306 4.493 4.493 0 0 0 4.306-1.758M16.5 9a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z" /></svg>'
     %}
         {% include 'components/header.html' %}
     {% endwith %}
 
     <div class="relative z-10 container mx-auto px-6 py-8 max-w-7xl">
-        <div class="flex flex-col items-center justify-center h-[60vh] opacity-50">
-            <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="mb-4 text-gray-500"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            <h2 class="text-xl font-medium text-gray-400">Quest Area Empty</h2>
-            <p class="text-sm text-gray-600 mt-2">Adventures coming soon...</p>
+        <!-- Search -->
+        <div class="mb-12 relative max-w-2xl mx-auto">
+            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-500">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                    <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clip-rule="evenodd" />
+                </svg>
+            </div>
+            <input type="text" id="search-input" 
+                class="w-full bg-[#111] border border-gray-800 text-gray-100 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block pl-10 p-4 shadow-xl transition-all placeholder-gray-600" 
+                placeholder="Search quests...">
+        </div>
+
+        <!-- Active Quests Section (Combined Pinned Inactive and Open Windows) -->
+        <div id="active-section" class="mb-12 {% if not active_quests %}hidden{% endif %}">
+            <h2 class="text-sm font-semibold text-green-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                Active Quests
+            </h2>
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4" id="active-grid">
+                {% for quest in active_quests %}
+                    {% if quest.is_active_window %}
+                        <!-- Open Active Quests (Rendered Green, on the Left) -->
+                        <div class="project-button group relative bg-[#111] border border-green-900/30 hover:border-green-500/50 rounded-2xl p-5 shadow-lg hover:shadow-green-900/10 transition-all cursor-pointer flex flex-col items-center justify-between gap-2 min-h-[15rem]"
+                             data-title="{{ quest.full_title }}" 
+                             data-name="{{ quest.name|lower }}"
+                             data-path="{{ quest.path }}"
+                             onclick="focusProject(this.dataset.title)">
+                            
+                            {% if quest.path %}
+                            <button class="absolute top-2 right-2 p-1.5 rounded-full hover:bg-yellow-500/10 {% if quest.is_pinned %}text-yellow-400{% else %}text-gray-700 hover:text-yellow-400{% endif %} opacity-0 group-hover:opacity-100 transition-all z-10"
+                                 title="Toggle Pin" 
+                                 data-path="{{ quest.path }}"
+                                 onclick="togglePin(event, this)">
+                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path d="M22.5 18a1.5 1.5 0 0 1-1.061-.44L13.75 9.879a5.492 5.492 0 0 0-1.636-6.195 1.5 1.5 0 0 0-2.228 0 5.492 5.492 0 0 0-1.636 6.195L.561 17.56A1.5 1.5 0 0 0 1.621 20h8.629v3.5a1.5 1.5 0 0 0 3 0V20h8.629a1.5 1.5 0 0 0 1.061-2z"/></svg>
+                            </button>
+
+                            <button class="absolute top-2 right-8 p-1.5 rounded-full hover:bg-blue-500/10 hover:text-blue-400 text-gray-700 opacity-0 group-hover:opacity-100 transition-all z-10"
+                                 title="Edit Dev Link" 
+                                 data-path="{{ quest.path }}"
+                                 data-link="{{ quest.dev_link }}"
+                                 onclick="editDevLink(event, this)">
+                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                            </button>
+                            {% endif %}
+
+                            {% if quest.dev_link %}
+                            <button class="absolute bottom-3 right-3 p-2 bg-[#1a1a1a] border border-green-900/30 hover:border-green-500/50 hover:bg-green-500/10 text-green-400 rounded-xl transition-all z-10 shadow-lg group/link"
+                                 title="Open Dev Link: {{ quest.dev_link }}" 
+                                 data-link="{{ quest.dev_link }}"
+                                 onclick="openDevLink(event, this)">
+                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover/link:scale-110 transition-transform"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
+                            </button>
+                            {% endif %}
+                            
+                            <div class="flex flex-col items-center gap-2 w-full">
+                                {{ render_icon(quest.has_icon, quest.path, True) }}
+                                <div class="text-sm font-medium text-gray-300 group-hover:text-green-400 text-center line-clamp-1 transition-colors">
+                                    {{ quest.name }}
+                                </div>
+                            </div>
+
+                            <!-- Progress Bars -->
+                            <div class="progress-container w-full text-xs text-gray-400 space-y-2 mt-2 pt-2 border-t border-gray-800/50" onclick="event.stopPropagation()">
+                                <div data-type="function">
+                                    <div class="flex justify-between text-[10px] mb-0.5">
+                                        <span class="text-gray-500 group-hover:text-gray-400">Function</span>
+                                        <span class="font-semibold text-blue-400">{{ quest.progress.function if (quest.progress and quest.progress.function) else 0 }}%</span>
+                                    </div>
+                                    <div class="w-full bg-gray-900 h-1.5 rounded-full relative cursor-pointer" onclick="setProgress(event, this, 'function')">
+                                        <div class="bar-fill bg-blue-500 h-1.5 rounded-full transition-all duration-300" {{ 'style="width: ' ~ (quest.progress.function if (quest.progress and quest.progress.function) else 0) ~ '%;"' | safe }}></div>
+                                    </div>
+                                </div>
+                                <div data-type="money">
+                                    <div class="flex justify-between text-[10px] mb-0.5">
+                                        <span class="text-gray-500 group-hover:text-gray-400">Money</span>
+                                        <span class="font-semibold text-green-400">{{ quest.progress.money if (quest.progress and quest.progress.money) else 0 }}%</span>
+                                    </div>
+                                    <div class="w-full bg-gray-900 h-1.5 rounded-full relative cursor-pointer" onclick="setProgress(event, this, 'money')">
+                                        <div class="bar-fill bg-green-500 h-1.5 rounded-full transition-all duration-300" {{ 'style="width: ' ~ (quest.progress.money if (quest.progress and quest.progress.money) else 0) ~ '%;"' | safe }}></div>
+                                    </div>
+                                </div>
+                                <div data-type="users">
+                                    <div class="flex justify-between text-[10px] mb-0.5">
+                                        <span class="text-gray-500 group-hover:text-gray-400">Users</span>
+                                        <span class="font-semibold text-purple-400">{{ quest.progress.users if (quest.progress and quest.progress.users) else 0 }}%</span>
+                                    </div>
+                                    <div class="w-full bg-gray-900 h-1.5 rounded-full relative cursor-pointer" onclick="setProgress(event, this, 'users')">
+                                        <div class="bar-fill bg-purple-500 h-1.5 rounded-full transition-all duration-300" {{ 'style="width: ' ~ (quest.progress.users if (quest.progress and quest.progress.users) else 0) ~ '%;"' | safe }}></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% else %}
+                        <!-- Pinned Inactive Quests (Shown on the Right) -->
+                        <div class="project-button group relative bg-[#111] border border-gray-800 hover:border-yellow-500/50 rounded-2xl p-5 shadow-lg hover:shadow-yellow-900/10 transition-all cursor-pointer flex flex-col items-center justify-between gap-2 min-h-[15rem]"
+                             data-name="{{ quest.name|lower }}" 
+                             data-path="{{ quest.path }}" 
+                             onclick="launchProject(this.dataset.path)">
+                            
+                            <button class="absolute top-2 left-2 p-1.5 rounded-full hover:bg-red-500/10 hover:text-red-400 text-gray-700 opacity-0 group-hover:opacity-100 transition-all z-10"
+                                 title="Hide Project" 
+                                 data-path="{{ quest.path }}"
+                                 onclick="ignoreProject(event, this)">
+                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                            </button>
+
+                            <button class="absolute top-2 right-2 p-1.5 rounded-full {% if quest.is_pinned %}text-yellow-400{% else %}text-gray-700 hover:text-yellow-400{% endif %} opacity-0 group-hover:opacity-100 hover:bg-yellow-500/10 transition-all z-10"
+                                 title="Toggle Pin" 
+                                 data-path="{{ quest.path }}"
+                                 onclick="togglePin(event, this)">
+                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path d="M22.5 18a1.5 1.5 0 0 1-1.061-.44L13.75 9.879a5.492 5.492 0 0 0-1.636-6.195 1.5 1.5 0 0 0-2.228 0 5.492 5.492 0 0 0-1.636 6.195L.561 17.56A1.5 1.5 0 0 0 1.621 20h8.629v3.5a1.5 1.5 0 0 0 3 0V20h8.629a1.5 1.5 0 0 0 1.061-2z"/></svg>
+                            </button>
+
+                            <button class="absolute top-2 right-8 p-1.5 rounded-full hover:bg-blue-500/10 hover:text-blue-400 text-gray-700 opacity-0 group-hover:opacity-100 transition-all z-10"
+                                 title="Edit Dev Link" 
+                                 data-path="{{ quest.path }}"
+                                 data-link="{{ quest.dev_link }}"
+                                 onclick="editDevLink(event, this)">
+                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                            </button>
+
+                            {% if quest.dev_link %}
+                            <button class="absolute bottom-3 right-3 p-2 bg-[#1a1a1a] border border-gray-800 hover:border-blue-500/50 hover:bg-blue-500/10 text-blue-400 rounded-xl transition-all z-10 shadow-lg group/link"
+                                 title="Open Dev Link: {{ quest.dev_link }}" 
+                                 data-link="{{ quest.dev_link }}"
+                                 onclick="openDevLink(event, this)">
+                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover/link:scale-110 transition-transform"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
+                            </button>
+                            {% endif %}
+
+                            <div class="flex flex-col items-center gap-2 w-full">
+                                {{ render_icon(quest.has_icon, quest.path) }}
+                                <div class="text-sm font-medium text-gray-400 group-hover:text-white text-center line-clamp-1 transition-colors">
+                                    {{ quest.name }}
+                                </div>
+                            </div>
+
+                            <!-- Progress Bars -->
+                            <div class="progress-container w-full text-xs text-gray-400 space-y-2 mt-2 pt-2 border-t border-gray-800/50" onclick="event.stopPropagation()">
+                                <div data-type="function">
+                                    <div class="flex justify-between text-[10px] mb-0.5">
+                                        <span class="text-gray-500 group-hover:text-gray-400">Function</span>
+                                        <span class="font-semibold text-blue-400">{{ quest.progress.function if (quest.progress and quest.progress.function) else 0 }}%</span>
+                                    </div>
+                                    <div class="w-full bg-gray-900 h-1.5 rounded-full relative cursor-pointer" onclick="setProgress(event, this, 'function')">
+                                        <div class="bar-fill bg-blue-500 h-1.5 rounded-full transition-all duration-300" {{ 'style="width: ' ~ (quest.progress.function if (quest.progress and quest.progress.function) else 0) ~ '%;"' | safe }}></div>
+                                    </div>
+                                </div>
+                                <div data-type="money">
+                                    <div class="flex justify-between text-[10px] mb-0.5">
+                                        <span class="text-gray-500 group-hover:text-gray-400">Money</span>
+                                        <span class="font-semibold text-green-400">{{ quest.progress.money if (quest.progress and quest.progress.money) else 0 }}%</span>
+                                    </div>
+                                    <div class="w-full bg-gray-900 h-1.5 rounded-full relative cursor-pointer" onclick="setProgress(event, this, 'money')">
+                                        <div class="bar-fill bg-green-500 h-1.5 rounded-full transition-all duration-300" {{ 'style="width: ' ~ (quest.progress.money if (quest.progress and quest.progress.money) else 0) ~ '%;"' | safe }}></div>
+                                    </div>
+                                </div>
+                                <div data-type="users">
+                                    <div class="flex justify-between text-[10px] mb-0.5">
+                                        <span class="text-gray-500 group-hover:text-gray-400">Users</span>
+                                        <span class="font-semibold text-purple-400">{{ quest.progress.users if (quest.progress and quest.progress.users) else 0 }}%</span>
+                                    </div>
+                                    <div class="w-full bg-gray-900 h-1.5 rounded-full relative cursor-pointer" onclick="setProgress(event, this, 'users')">
+                                        <div class="bar-fill bg-purple-500 h-1.5 rounded-full transition-all duration-300" {{ 'style="width: ' ~ (quest.progress.users if (quest.progress and quest.progress.users) else 0) ~ '%;"' | safe }}></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Inactive Quests Section -->
+        <div id="unpinned-section">
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Inactive Quests</h2>
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4" id="unpinned-projects-grid">
+                {% for project in unpinned_inactive_projects %}
+                    <div class="project-button group relative bg-[#111] border border-gray-800 hover:border-blue-500/50 rounded-2xl p-6 shadow-lg hover:shadow-blue-900/10 transition-all cursor-pointer flex flex-col items-center justify-center gap-3 h-40"
+                         data-name="{{ project.name|lower }}" 
+                         data-path="{{ project.path }}" 
+                         onclick="launchProject(this.dataset.path)">
+                        
+                        <button class="absolute top-2 left-2 p-1.5 rounded-full hover:bg-red-500/10 hover:text-red-400 text-gray-700 opacity-0 group-hover:opacity-100 transition-all z-10"
+                             title="Hide Project" 
+                             data-path="{{ project.path }}"
+                             onclick="ignoreProject(event, this)">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                        </button>
+
+                        <button class="absolute top-2 right-2 p-1.5 rounded-full text-gray-700 opacity-0 group-hover:opacity-100 hover:text-yellow-400 hover:bg-yellow-500/10 transition-all z-10"
+                             title="Toggle Pin" 
+                             data-path="{{ project.path }}"
+                             onclick="togglePin(event, this)">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path d="M22.5 18a1.5 1.5 0 0 1-1.061-.44L13.75 9.879a5.492 5.492 0 0 0-1.636-6.195 1.5 1.5 0 0 0-2.228 0 5.492 5.492 0 0 0-1.636 6.195L.561 17.56A1.5 1.5 0 0 0 1.621 20h8.629v3.5a1.5 1.5 0 0 0 3 0V20h8.629a1.5 1.5 0 0 0 1.061-2z"/></svg>
+                        </button>
+
+                        <button class="absolute top-2 right-8 p-1.5 rounded-full hover:bg-blue-500/10 hover:text-blue-400 text-gray-700 opacity-0 group-hover:opacity-100 transition-all z-10"
+                             title="Edit Dev Link" 
+                             data-path="{{ project.path }}"
+                             data-link="{{ project.dev_link }}"
+                             onclick="editDevLink(event, this)">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                        </button>
+
+                        {% if project.dev_link %}
+                        <button class="absolute bottom-3 right-3 p-2 bg-[#1a1a1a] border border-gray-800 hover:border-blue-500/50 hover:bg-blue-500/10 text-blue-400 rounded-xl transition-all z-10 shadow-lg group/link"
+                             title="Open Dev Link: {{ project.dev_link }}" 
+                             data-link="{{ project.dev_link }}"
+                             onclick="openDevLink(event, this)">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover/link:scale-110 transition-transform"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
+                        </button>
+                        {% endif %}
+
+                        {{ render_icon(project.has_icon, project.path) }}
+                        
+                        <div class="text-sm font-medium text-gray-400 group-hover:text-white text-center line-clamp-2 transition-colors">
+                            {{ project.name }}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
         </div>
     </div>
+
+    <!-- Live Screen View Elements -->
+    
+    <!-- Floating Trigger Button -->
+    <button 
+        onclick="toggleScreenView()"
+        class="fixed bottom-24 right-6 w-12 h-12 bg-gray-800 hover:bg-gray-700 text-white rounded-full shadow-lg border border-gray-600 flex items-center justify-center z-[60] transition-all hover:scale-110 active:scale-95 group"
+        title="View Desktop"
+    >
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover:text-blue-400 transition-colors">
+            <rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>
+        </svg>
+    </button>
+
+    <!-- Modal Overlay -->
+    <div id="screen-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] hidden flex items-center justify-center p-4">
+        <div class="relative w-full max-w-[90vw] h-[80vh] bg-[#111] border border-gray-700 rounded-2xl overflow-hidden shadow-2xl flex flex-col animate-in fade-in zoom-in duration-200">
+            <!-- Modal Header -->
+            <div class="flex justify-between items-center px-4 py-3 border-b border-gray-800 bg-[#0A0A0A]">
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                    <span class="text-sm font-medium text-gray-300">Live Desktop View</span>
+                </div>
+                <button onclick="toggleScreenView()" class="p-1 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
+            </div>
+            
+            <!-- Modal Content (Image) -->
+            <div class="flex-1 bg-black flex items-center justify-center overflow-hidden relative group">
+                 <img id="screen-img" class="max-w-full max-h-full object-contain" src="" alt="Loading screen...">
+                 <div class="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur px-3 py-1 rounded-full text-xs text-white/50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    Updating live...
+                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Processing Overlay -->
+    <div id="processing-overlay" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex flex-col items-center justify-center">
+        <div class="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mb-4"></div>
+        <div class="text-blue-400 font-medium animate-pulse">Processing...</div>
+    </div>
+
+    <script id="pinned-inactive-data" type="application/json">
+        {{ pinned_inactive_projects | tojson | safe if pinned_inactive_projects else "[]" }}
+    </script>
+
+    <script>
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        
+        // Load the pinned inactive projects passed from Flask securely
+        const pinnedInactiveQuests = JSON.parse(document.getElementById('pinned-inactive-data').textContent || '[]');
+
+        function showProcessing() {
+            document.getElementById('processing-overlay').classList.remove('hidden');
+        }
+
+        function hideProcessing() {
+            document.getElementById('processing-overlay').classList.add('hidden');
+        }
+
+        // --- Pin Logic ---
+        async function togglePin(event, element) {
+            event.stopPropagation();
+            const path = element.dataset.path;
+            try {
+                showProcessing();
+                const response = await fetch('/api/toggle_pin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body: JSON.stringify({ path: path }),
+                });
+                if((await response.json()).status === 'success') location.reload(); 
+                else hideProcessing();
+            } catch (error) { 
+                console.error('Error:', error); 
+                hideProcessing();
+            }
+        }
+
+        // --- Dev Link Logic ---
+        async function editDevLink(event, element) {
+            event.stopPropagation();
+            const path = element.dataset.path;
+            if (!path || path === "undefined") {
+                alert("This project does not have a valid path linked.");
+                return;
+            }
+            const currentLink = element.dataset.link || "";
+            
+            const newLink = prompt("Enter development link for this project (leave blank to remove):", currentLink);
+            if (newLink === null) return; // Cancelled
+            
+            try {
+                showProcessing();
+                const response = await fetch('/api/project_link', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body: JSON.stringify({ path: path, link: newLink.trim() }),
+                });
+                if((await response.json()).status === 'success') {
+                    location.reload(); 
+                } else {
+                    hideProcessing();
+                }
+            } catch (error) { 
+                console.error('Error:', error); 
+                hideProcessing();
+            }
+        }
+
+        function openDevLink(event, element) {
+            event.stopPropagation();
+            let link = element.dataset.link;
+            if (link && !link.startsWith('http://') && !link.startsWith('https://')) {
+                link = 'http://' + link;
+            }
+            window.open(link, '_blank');
+        }
+
+        // --- Search Logic ---
+        document.getElementById('search-input').addEventListener('keyup', function() {
+            let filter = this.value.toLowerCase();
+            let buttons = document.querySelectorAll('.project-button');
+            buttons.forEach(function(button) {
+                let name = button.dataset.name; 
+                if (name && name.includes(filter)) {
+                    button.classList.remove('hidden');
+                    button.style.display = 'flex'; // Restore flex layout
+                } else {
+                    button.classList.add('hidden');
+                    button.style.display = 'none';
+                }
+            });
+        });
+
+        // --- Launch Logic ---
+        async function launchProject(path) {
+            try {
+                showProcessing();
+                const response = await fetch('/launch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body: JSON.stringify({ path: path }),
+                });
+                const data = await response.json();
+                
+                if(data.status === 'success') {
+                    window.location.href = '/chat?project=' + encodeURIComponent(data.project_name);
+                } else {
+                    hideProcessing();
+                    alert("Launch failed: " + data.message);
+                }
+            } catch (error) { 
+                console.error('Error:', error);
+                hideProcessing();
+                alert("An error occurred while launching.");
+            }
+        }
+
+        // --- Focus Logic ---
+        async function focusProject(title) {
+            try {
+                showProcessing();
+                const response = await fetch('/focus', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body: JSON.stringify({ title: title }),
+                });
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    window.location.href = '/chat?project=' + encodeURIComponent(data.project_name);
+                } else {
+                   hideProcessing();
+                   alert("Could not focus window: " + data.message);
+                }
+            } catch (error) { 
+                console.error('Error:', error);
+                hideProcessing();
+                alert("An error occurred while focusing.");
+            }
+        }
+
+        // --- Ignore Logic ---
+        async function ignoreProject(event, element) {
+            event.stopPropagation(); 
+            if(!confirm("Hide this project?")) return;
+            
+            const path = element.dataset.path;
+
+            try {
+                const response = await fetch('/ignore', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body: JSON.stringify({ path: path }),
+                });
+                if((await response.json()).status === 'success') location.reload(); 
+            } catch (error) { console.error('Error:', error); }
+        }
+
+        // --- Progress Updates ---
+        async function setProgress(event, barElement, type) {
+            event.stopPropagation();
+            const card = barElement.closest('.project-button');
+            const path = card.dataset.path;
+            if (!path || path === "undefined") {
+                return;
+            }
+            
+            // Calculate clicked percentage
+            const rect = barElement.getBoundingClientRect();
+            const clickX = event.clientX - rect.left;
+            const width = rect.width;
+            let percentage = Math.round((clickX / width) * 100);
+            if (percentage < 0) percentage = 0;
+            if (percentage > 100) percentage = 100;
+            
+            // Optimistically update clicked bar state in UI
+            const barFill = barElement.querySelector('.bar-fill');
+            if (barFill) {
+                barFill.style.width = percentage + '%';
+            }
+            const labelRow = barElement.previousElementSibling;
+            if (labelRow) {
+                const valSpan = labelRow.querySelector('span:last-child');
+                if (valSpan) {
+                    valSpan.textContent = percentage + '%';
+                }
+            }
+            
+            // Parse all three values from DOM to send complete payload
+            let functionVal = 0;
+            let moneyVal = 0;
+            let usersVal = 0;
+            
+            const progressContainer = barElement.closest('.progress-container');
+            if (progressContainer) {
+                const funcFill = progressContainer.querySelector('[data-type="function"] .bar-fill');
+                const moneyFill = progressContainer.querySelector('[data-type="money"] .bar-fill');
+                const usersFill = progressContainer.querySelector('[data-type="users"] .bar-fill');
+                
+                if (funcFill) functionVal = parseInt(funcFill.style.width) || 0;
+                if (moneyFill) moneyVal = parseInt(moneyFill.style.width) || 0;
+                if (usersFill) usersVal = parseInt(usersFill.style.width) || 0;
+            }
+            
+            try {
+                const response = await fetch('/api/update_progress', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body: JSON.stringify({
+                        path: path,
+                        function: functionVal,
+                        money: moneyVal,
+                        users: usersVal
+                    }),
+                });
+                const resData = await response.json();
+                if (resData.status !== 'success') {
+                    console.error('Failed to update progress on server');
+                } else {
+                    // Update global pinnedInactiveQuests state in memory
+                    const normPath = path.toLowerCase().replace(/\\/g, '/');
+                    const matchingQuest = pinnedInactiveQuests.find(q => {
+                        const qPath = q.path ? q.path.toLowerCase().replace(/\\/g, '/') : '';
+                        return qPath === normPath;
+                    });
+                    if (matchingQuest) {
+                        matchingQuest.progress = {
+                            function: functionVal,
+                            money: moneyVal,
+                            users: usersVal
+                        };
+                    }
+                }
+            } catch (error) {
+                console.error('Error saving progress:', error);
+            }
+        }
+
+        // --- High Rate Polling ---
+        setInterval(refreshActiveWindows, 1000); 
+
+        async function refreshActiveWindows() {
+            try {
+                const response = await fetch('/api/active');
+                const windows = await response.json();
+                
+                const grid = document.getElementById('active-grid');
+                const section = document.getElementById('active-section');
+
+                // If both pinned inactive projects and currently open windows are empty, hide the Active Quests section.
+                if (pinnedInactiveQuests.length === 0 && windows.length === 0) {
+                    section.classList.add('hidden');
+                    grid.innerHTML = '';
+                    return;
+                }
+
+                section.classList.remove('hidden');
+                
+                // Rebuild the HTML for Active Quests grid dynamically
+                const htmlParts = [];
+
+                // 1. Render all open active quests (placed on the left, styled green)
+                windows.forEach(win => {
+                    let progress = win.progress || { function: 0, money: 0, users: 0 };
+                    let funcProgress = progress.function || 0;
+                    let moneyProgress = progress.money || 0;
+                    let usersProgress = progress.users || 0;
+
+                    let iconHtml = win.has_icon 
+                        ? `<img class="w-10 h-10 object-contain" src="/get_icon?path=${encodeURIComponent(win.path)}" alt="Icon">` 
+                        : `<div class="text-green-400"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-8 h-8"><path stroke-linecap="round" stroke-linejoin="round" d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" /></svg></div>`;
+                    
+                    let safeTitle = win.full_title.replace(/"/g, '"');
+                    let safePath = win.path ? win.path.replace(/"/g, '"') : '';
+                    let devLinkAttr = win.dev_link ? win.dev_link.replace(/"/g, '"') : '';
+                    let safeName = win.name ? win.name.toLowerCase().replace(/"/g, '"') : '';
+                    
+                    let pinBtn = win.path ? `
+                        <button class="absolute top-2 right-2 p-1.5 rounded-full hover:bg-yellow-500/10 ${win.is_pinned ? 'text-yellow-400' : 'text-gray-700 hover:text-yellow-400'} opacity-0 group-hover:opacity-100 transition-all z-10"
+                             title="Toggle Pin" 
+                             data-path="${safePath}"
+                             onclick="togglePin(event, this)">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path d="M22.5 18a1.5 1.5 0 0 1-1.061-.44L13.75 9.879a5.492 5.492 0 0 0-1.636-6.195 1.5 1.5 0 0 0-2.228 0 5.492 5.492 0 0 0-1.636 6.195L.561 17.56A1.5 1.5 0 0 0 1.621 20h8.629v3.5a1.5 1.5 0 0 0 3 0V20h8.629a1.5 1.5 0 0 0 1.061-2z"/></svg>
+                        </button>
+                    ` : '';
+
+                    let editLinkBtn = win.path ? `
+                        <button class="absolute top-2 right-8 p-1.5 rounded-full hover:bg-blue-500/10 hover:text-blue-400 text-gray-700 opacity-0 group-hover:opacity-100 transition-all z-10"
+                             title="Edit Dev Link" 
+                             data-path="${safePath}"
+                             data-link="${devLinkAttr}"
+                             onclick="editDevLink(event, this)">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                        </button>
+                    ` : '';
+
+                    let openLinkBtn = win.dev_link ? `
+                        <button class="absolute bottom-3 right-3 p-2 bg-[#1a1a1a] border border-green-900/30 hover:border-green-500/50 hover:bg-green-500/10 text-green-400 rounded-xl transition-all z-10 shadow-lg group/link"
+                             title="Open Dev Link: ${devLinkAttr}" 
+                             data-link="${devLinkAttr}"
+                             onclick="openDevLink(event, this)">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover/link:scale-110 transition-transform"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
+                        </button>
+                    ` : '';
+
+                    htmlParts.push(`
+                        <div class="project-button group relative bg-[#111] border border-green-900/30 hover:border-green-500/50 rounded-2xl p-5 shadow-lg hover:shadow-green-900/10 transition-all cursor-pointer flex flex-col items-center justify-between gap-2 min-h-[15rem]"
+                             data-title="${safeTitle}" 
+                             data-name="${safeName}"
+                             data-path="${safePath}"
+                             onclick="focusProject(this.dataset.title)">
+                            ${pinBtn}
+                            ${editLinkBtn}
+                            ${openLinkBtn}
+                            <div class="flex flex-col items-center gap-2 w-full">
+                                ${iconHtml}
+                                <div class="text-sm font-medium text-gray-300 group-hover:text-green-400 text-center line-clamp-1 transition-colors">
+                                    ${win.name}
+                                </div>
+                            </div>
+                            
+                            <!-- Progress Bars -->
+                            <div class="progress-container w-full text-xs text-gray-400 space-y-2 mt-2 pt-2 border-t border-gray-800/50" onclick="event.stopPropagation()">
+                                <div data-type="function">
+                                    <div class="flex justify-between text-[10px] mb-0.5">
+                                        <span class="text-gray-500 group-hover:text-gray-400">Function</span>
+                                        <span class="font-semibold text-blue-400">${funcProgress}%</span>
+                                    </div>
+                                    <div class="w-full bg-gray-900 h-1.5 rounded-full relative cursor-pointer" onclick="setProgress(event, this, 'function')">
+                                        <div class="bar-fill bg-blue-500 h-1.5 rounded-full transition-all duration-300" style="width: ${funcProgress}%;"></div>
+                                    </div>
+                                </div>
+                                <div data-type="money">
+                                    <div class="flex justify-between text-[10px] mb-0.5">
+                                        <span class="text-gray-500 group-hover:text-gray-400">Money</span>
+                                        <span class="font-semibold text-green-400">${moneyProgress}%</span>
+                                    </div>
+                                    <div class="w-full bg-gray-900 h-1.5 rounded-full relative cursor-pointer" onclick="setProgress(event, this, 'money')">
+                                        <div class="bar-fill bg-green-500 h-1.5 rounded-full transition-all duration-300" style="width: ${moneyProgress}%;"></div>
+                                    </div>
+                                </div>
+                                <div data-type="users">
+                                    <div class="flex justify-between text-[10px] mb-0.5">
+                                        <span class="text-gray-500 group-hover:text-gray-400">Users</span>
+                                        <span class="font-semibold text-purple-400">${usersProgress}%</span>
+                                    </div>
+                                    <div class="w-full bg-gray-900 h-1.5 rounded-full relative cursor-pointer" onclick="setProgress(event, this, 'users')">
+                                        <div class="bar-fill bg-purple-500 h-1.5 rounded-full transition-all duration-300" style="width: ${usersProgress}%;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `);
+                });
+
+                // 2. Render all pinned inactive quests (placed on the right)
+                pinnedInactiveQuests.forEach(quest => {
+                    let progress = quest.progress || { function: 0, money: 0, users: 0 };
+                    let funcProgress = progress.function || 0;
+                    let moneyProgress = progress.money || 0;
+                    let usersProgress = progress.users || 0;
+
+                    let iconHtml = quest.has_icon 
+                        ? `<img class="w-10 h-10 object-contain" src="/get_icon?path=${encodeURIComponent(quest.path)}" alt="Icon">` 
+                        : `<div class="text-green-400"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-8 h-8"><path stroke-linecap="round" stroke-linejoin="round" d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" /></svg></div>`;
+                    
+                    let safePath = quest.path ? quest.path.replace(/"/g, '"') : '';
+                    let devLinkAttr = quest.dev_link ? quest.dev_link.replace(/"/g, '"') : '';
+                    let safeName = quest.name ? quest.name.toLowerCase().replace(/"/g, '"') : '';
+
+                    let hideBtn = `
+                        <button class="absolute top-2 left-2 p-1.5 rounded-full hover:bg-red-500/10 hover:text-red-400 text-gray-700 opacity-0 group-hover:opacity-100 transition-all z-10"
+                             title="Hide Project" 
+                             data-path="${safePath}"
+                             onclick="ignoreProject(event, this)">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                        </button>
+                    `;
+
+                    let pinBtn = `
+                        <button class="absolute top-2 right-2 p-1.5 rounded-full text-yellow-400 opacity-0 group-hover:opacity-100 hover:bg-yellow-500/10 transition-all z-10"
+                             title="Toggle Pin" 
+                             data-path="${safePath}"
+                             onclick="togglePin(event, this)">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path d="M22.5 18a1.5 1.5 0 0 1-1.061-.44L13.75 9.879a5.492 5.492 0 0 0-1.636-6.195 1.5 1.5 0 0 0-2.228 0 5.492 5.492 0 0 0-1.636 6.195L.561 17.56A1.5 1.5 0 0 0 1.621 20h8.629v3.5a1.5 1.5 0 0 0 3 0V20h8.629a1.5 1.5 0 0 0 1.061-2z"/></svg>
+                        </button>
+                    `;
+
+                    let editLinkBtn = `
+                        <button class="absolute top-2 right-8 p-1.5 rounded-full hover:bg-blue-500/10 hover:text-blue-400 text-gray-700 opacity-0 group-hover:opacity-100 transition-all z-10"
+                             title="Edit Dev Link" 
+                             data-path="${safePath}"
+                             data-link="${devLinkAttr}"
+                             onclick="editDevLink(event, this)">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                        </button>
+                    `;
+
+                    let openLinkBtn = quest.dev_link ? `
+                        <button class="absolute bottom-3 right-3 p-2 bg-[#1a1a1a] border border-gray-800 hover:border-blue-500/50 hover:bg-blue-500/10 text-blue-400 rounded-xl transition-all z-10 shadow-lg group/link"
+                             title="Open Dev Link: ${devLinkAttr}" 
+                             data-link="${devLinkAttr}"
+                             onclick="openDevLink(event, this)">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover/link:scale-110 transition-transform"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
+                        </button>
+                    ` : '';
+
+                    htmlParts.push(`
+                        <div class="project-button group relative bg-[#111] border border-gray-800 hover:border-yellow-500/50 rounded-2xl p-5 shadow-lg hover:shadow-yellow-900/10 transition-all cursor-pointer flex flex-col items-center justify-between gap-2 min-h-[15rem]"
+                             data-name="${safeName}" 
+                             data-path="${safePath}" 
+                             onclick="launchProject(this.dataset.path)">
+                            ${hideBtn}
+                            ${pinBtn}
+                            ${editLinkBtn}
+                            ${openLinkBtn}
+                            <div class="flex flex-col items-center gap-2 w-full">
+                                ${iconHtml}
+                                <div class="text-sm font-medium text-gray-400 group-hover:text-white text-center line-clamp-1 transition-colors">
+                                    ${quest.name}
+                                </div>
+                            </div>
+                            
+                            <!-- Progress Bars -->
+                            <div class="progress-container w-full text-xs text-gray-400 space-y-2 mt-2 pt-2 border-t border-gray-800/50" onclick="event.stopPropagation()">
+                                <div data-type="function">
+                                    <div class="flex justify-between text-[10px] mb-0.5">
+                                        <span class="text-gray-500 group-hover:text-gray-400">Function</span>
+                                        <span class="font-semibold text-blue-400">${funcProgress}%</span>
+                                    </div>
+                                    <div class="w-full bg-gray-900 h-1.5 rounded-full relative cursor-pointer" onclick="setProgress(event, this, 'function')">
+                                        <div class="bar-fill bg-blue-500 h-1.5 rounded-full transition-all duration-300" style="width: ${funcProgress}%;"></div>
+                                    </div>
+                                </div>
+                                <div data-type="money">
+                                    <div class="flex justify-between text-[10px] mb-0.5">
+                                        <span class="text-gray-500 group-hover:text-gray-400">Money</span>
+                                        <span class="font-semibold text-green-400">${moneyProgress}%</span>
+                                    </div>
+                                    <div class="w-full bg-gray-900 h-1.5 rounded-full relative cursor-pointer" onclick="setProgress(event, this, 'money')">
+                                        <div class="bar-fill bg-green-500 h-1.5 rounded-full transition-all duration-300" style="width: ${moneyProgress}%;"></div>
+                                    </div>
+                                </div>
+                                <div data-type="users">
+                                    <div class="flex justify-between text-[10px] mb-0.5">
+                                        <span class="text-gray-500 group-hover:text-gray-400">Users</span>
+                                        <span class="font-semibold text-purple-400">${usersProgress}%</span>
+                                    </div>
+                                    <div class="w-full bg-gray-900 h-1.5 rounded-full relative cursor-pointer" onclick="setProgress(event, this, 'users')">
+                                        <div class="bar-fill bg-purple-500 h-1.5 rounded-full transition-all duration-300" style="width: ${usersProgress}%;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `);
+                });
+
+                grid.innerHTML = htmlParts.join('');
+
+            } catch (e) { console.error("Polling error", e); }
+        }
+
+        // --- Live Screen View Logic ---
+        let screenInterval = null;
+        const screenModal = document.getElementById('screen-modal');
+        const screenImg = document.getElementById('screen-img');
+
+        // Close modal on click outside
+        screenModal.addEventListener('click', (e) => {
+            if (e.target === screenModal) {
+                toggleScreenView();
+            }
+        });
+
+        function toggleScreenView() {
+            const isHidden = screenModal.classList.contains('hidden');
+            if (isHidden) {
+                screenModal.classList.remove('hidden');
+                startScreenStream();
+            } else {
+                screenModal.classList.add('hidden');
+                stopScreenStream();
+            }
+        }
+
+        function startScreenStream() {
+            stopScreenStream(); // clear any existing
+            refreshScreen();
+            screenInterval = setInterval(refreshScreen, 1000); // 1 update per second
+        }
+
+        function stopScreenStream() {
+            if (screenInterval) clearInterval(screenInterval);
+            screenInterval = null;
+        }
+
+        function refreshScreen() {
+            // timestamp to prevent caching
+            const tempImg = new Image();
+            tempImg.onload = () => {
+                screenImg.src = tempImg.src;
+            };
+            tempImg.src = '/api/screenshot?t=' + new Date().getTime();
+        }
+    </script>
 </body>
 </html>

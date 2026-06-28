@@ -105,9 +105,17 @@ queue_lock = threading.Lock()
 def process_next_queue_item():
     global task_queue, current_queue_task, global_completion_status, global_last_reply, system_busy
     
+    timeout_minutes = int(config.get('queue_timeout_minutes', 5))
+    wait_timeout = timeout_minutes * 60
+    start_wait = time.time()
+    
     while True:
         # Wait if the system is currently processing any LLM interaction
         while system_busy:
+            if time.time() - start_wait > wait_timeout:
+                logger.warning("Queue wait timeout exceeded, proceeding with next task.")
+                system_busy = False
+                break
             time.sleep(2)
             
         with queue_lock:
@@ -240,6 +248,7 @@ def home():
                            terminal_log_level=terminal_log_level,
                            terminal_alert_level=terminal_alert_level,
                            ntfy_notification_level=ntfy_notification_level,
+                           queue_timeout_minutes=int(config.get('queue_timeout_minutes', 5)),
                            config=config,
                            tunnel_active=tunnel_active,
                            auth_required=auth_required,
@@ -628,7 +637,151 @@ def dashboard():
 @app.route('/cline_quest')
 @limiter.exempt
 def cline_quest():
-    return render_template('cline_quest.html')
+    all_projects = get_all_projects_with_ignore_state()
+    active_windows = filter_ignored_projects(get_ui_active_windows())
+    links = load_project_links()
+    
+    pinned_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'pinned_quests.json')
+    pinned_data = {}
+    if os.path.exists(pinned_file):
+        try:
+            with open(pinned_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    pinned_data = {path: {"function": 0, "money": 0, "users": 0} for path in data}
+                elif isinstance(data, dict):
+                    pinned_data = data
+        except:
+            pass
+            
+    pinned_paths = list(pinned_data.keys())
+    active_paths = [os.path.normcase(os.path.normpath(w.get('path'))) for w in active_windows if w.get('path')]
+    
+    pinned_inactive_projects = []
+    unpinned_inactive_projects = []
+    
+    for p in all_projects:
+        if p.get('is_ignored'):
+            continue
+        p_path = p.get('path')
+        if not p_path:
+            continue
+            
+        norm = os.path.normcase(os.path.normpath(p_path))
+        p['dev_link'] = links.get(norm, "")
+        p['is_pinned'] = norm in pinned_paths
+        p['progress'] = pinned_data.get(norm, {"function": 0, "money": 0, "users": 0})
+        
+        if norm not in active_paths:
+            if norm in pinned_paths:
+                pinned_inactive_projects.append(p)
+            else:
+                unpinned_inactive_projects.append(p)
+                
+    active_quests = []
+    
+    # 1. We add active windows first (placed on the left)
+    for win in active_windows:
+        p_path = win.get('path')
+        if p_path:
+            norm = os.path.normcase(os.path.normpath(p_path))
+            win['dev_link'] = links.get(norm, "")
+            win['is_pinned'] = norm in pinned_paths
+            win['progress'] = pinned_data.get(norm, {"function": 0, "money": 0, "users": 0})
+        else:
+            win['dev_link'] = ""
+            win['is_pinned'] = False
+            win['progress'] = {"function": 0, "money": 0, "users": 0}
+        win['is_active_window'] = True
+        active_quests.append(win)
+        
+    # 2. We add pinned inactive projects second (placed on the right)
+    for p in pinned_inactive_projects:
+        p['is_active_window'] = False
+        active_quests.append(p)
+            
+    return render_template('cline_quest.html', 
+                           active_quests=active_quests, 
+                           pinned_inactive_projects=pinned_inactive_projects,
+                           unpinned_inactive_projects=unpinned_inactive_projects,
+                           all_projects=all_projects)
+
+@app.route('/api/toggle_pin', methods=['POST'])
+@limiter.exempt
+def toggle_pin():
+    project_path = request.json.get('path')
+    if not project_path:
+        return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
+        
+    pinned_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'pinned_quests.json')
+    pinned_data = {}
+    if os.path.exists(pinned_file):
+        try:
+            with open(pinned_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    pinned_data = {path: {"function": 0, "money": 0, "users": 0} for path in data}
+                elif isinstance(data, dict):
+                    pinned_data = data
+        except:
+            pass
+            
+    norm_target = os.path.normcase(os.path.normpath(project_path))
+    if norm_target in pinned_data:
+        del pinned_data[norm_target]
+        is_pinned = False
+    else:
+        pinned_data[norm_target] = {"function": 0, "money": 0, "users": 0}
+        is_pinned = True
+        
+    try:
+        with open(pinned_file, 'w', encoding='utf-8') as f:
+            json.dump(pinned_data, f, indent=4)
+        return jsonify({'status': 'success', 'is_pinned': is_pinned})
+    except Exception as e:
+        logger.error(f"Error saving pin state: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/update_progress', methods=['POST'])
+@limiter.exempt
+def update_progress():
+    try:
+        data = request.get_json()
+        project_path = data.get('path')
+        if not project_path:
+            return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
+            
+        function_val = int(data.get('function', 0))
+        money_val = int(data.get('money', 0))
+        users_val = int(data.get('users', 0))
+        
+        pinned_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'pinned_quests.json')
+        pinned_data = {}
+        if os.path.exists(pinned_file):
+            try:
+                with open(pinned_file, 'r', encoding='utf-8') as f:
+                    file_data = json.load(f)
+                    if isinstance(file_data, list):
+                        pinned_data = {path: {"function": 0, "money": 0, "users": 0} for path in file_data}
+                    elif isinstance(file_data, dict):
+                        pinned_data = file_data
+            except:
+                pass
+                
+        norm_target = os.path.normcase(os.path.normpath(project_path))
+        pinned_data[norm_target] = {
+            "function": function_val,
+            "money": money_val,
+            "users": users_val
+        }
+        
+        with open(pinned_file, 'w', encoding='utf-8') as f:
+            json.dump(pinned_data, f, indent=4)
+            
+        return jsonify({'status': 'success', 'message': 'Progress updated'})
+    except Exception as e:
+        logger.error(f"Error updating progress: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/multi_project')
 @limiter.exempt
@@ -664,13 +817,31 @@ def chat():
 def api_active():
     active = filter_ignored_projects(get_ui_active_windows())
     links = load_project_links()
+    
+    pinned_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'pinned_quests.json')
+    pinned_data = {}
+    if os.path.exists(pinned_file):
+        try:
+            with open(pinned_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    pinned_data = {path: {"function": 0, "money": 0, "users": 0} for path in data}
+                elif isinstance(data, dict):
+                    pinned_data = data
+        except:
+            pass
+
     for win in active:
         p_path = win.get('path')
         if p_path:
             norm_path = os.path.normcase(os.path.normpath(p_path))
             win['dev_link'] = links.get(norm_path, "")
+            win['is_pinned'] = norm_path in pinned_data
+            win['progress'] = pinned_data.get(norm_path, {"function": 0, "money": 0, "users": 0})
         else:
             win['dev_link'] = ""
+            win['is_pinned'] = False
+            win['progress'] = {"function": 0, "money": 0, "users": 0}
     return jsonify(active)
 
 @app.route('/api/project_link', methods=['POST'])
@@ -917,6 +1088,21 @@ def api_queue():
             threading.Thread(target=process_next_queue_item, daemon=True).start()
             
         return jsonify({'status': 'success', 'task': task})
+
+@app.route('/api/timeout', methods=['POST'])
+@limiter.exempt
+def set_timeout():
+    global config
+    try:
+        data = request.get_json()
+        timeout = int(data.get('timeout', 5))
+        config['queue_timeout_minutes'] = str(timeout)
+        write_config(config)
+        logger.info(f"Queue wait timeout set to: {timeout} minutes")
+        return jsonify({'success': True, 'timeout': timeout})
+    except Exception as e:
+        logger.error(f"Error setting timeout: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 ngrok_tunnel = None
 
