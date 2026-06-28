@@ -105,17 +105,9 @@ queue_lock = threading.Lock()
 def process_next_queue_item():
     global task_queue, current_queue_task, global_completion_status, global_last_reply, system_busy
     
-    timeout_minutes = int(config.get('queue_timeout_minutes', 5))
-    wait_timeout = timeout_minutes * 60
-    start_wait = time.time()
-    
     while True:
         # Wait if the system is currently processing any LLM interaction
         while system_busy:
-            if time.time() - start_wait > wait_timeout:
-                logger.warning("Queue wait timeout exceeded, proceeding with next task.")
-                system_busy = False
-                break
             time.sleep(2)
             
         with queue_lock:
@@ -248,7 +240,6 @@ def home():
                            terminal_log_level=terminal_log_level,
                            terminal_alert_level=terminal_alert_level,
                            ntfy_notification_level=ntfy_notification_level,
-                           queue_timeout_minutes=int(config.get('queue_timeout_minutes', 5)),
                            config=config,
                            tunnel_active=tunnel_active,
                            auth_required=auth_required,
@@ -926,21 +917,6 @@ def api_queue():
             threading.Thread(target=process_next_queue_item, daemon=True).start()
             
         return jsonify({'status': 'success', 'task': task})
-
-@app.route('/api/timeout', methods=['POST'])
-@limiter.exempt
-def set_timeout():
-    global config
-    try:
-        data = request.get_json()
-        timeout = int(data.get('timeout', 5))
-        config['queue_timeout_minutes'] = str(timeout)
-        write_config(config)
-        logger.info(f"Queue wait timeout set to: {timeout} minutes")
-        return jsonify({'success': True, 'timeout': timeout})
-    except Exception as e:
-        logger.error(f"Error setting timeout: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 ngrok_tunnel = None
 

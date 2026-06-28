@@ -124,17 +124,6 @@
                     </div>
                 </div>
             </div>
-
-            <!-- Queue Timeout Section -->
-            <div class="bg-[#111] border border-gray-800 rounded-2xl p-6 shadow-xl">
-                <h3 class="text-sm font-medium text-gray-400 mb-4 uppercase tracking-wider">Queue Timeout</h3>
-                <div class="flex gap-2 p-1 bg-gray-800/50 rounded-xl border border-gray-700/50 mb-2" id="timeout-level-group">
-                    <button class="flex-1 py-2 px-2 rounded-lg text-xs font-medium transition-all {{ 'bg-gray-700 text-white shadow-sm' if queue_timeout_minutes == 5 else 'text-gray-400 hover:text-white hover:bg-gray-700/50' }} model-btn" onclick="setTimeoutPref(this, 5)">5 Min</button>
-                    <button class="flex-1 py-2 px-2 rounded-lg text-xs font-medium transition-all {{ 'bg-gray-700 text-white shadow-sm' if queue_timeout_minutes == 10 else 'text-gray-400 hover:text-white hover:bg-gray-700/50' }} model-btn" onclick="setTimeoutPref(this, 10)">10 Min</button>
-                    <button class="flex-1 py-2 px-2 rounded-lg text-xs font-medium transition-all {{ 'bg-gray-700 text-white shadow-sm' if queue_timeout_minutes == 15 else 'text-gray-400 hover:text-white hover:bg-gray-700/50' }} model-btn" onclick="setTimeoutPref(this, 15)">15 Min</button>
-                </div>
-                <p class="text-[10px] text-gray-600 mt-1">Wait time for active task completion.</p>
-            </div>
         </div>
 
         <div class="mt-6 bg-[#111] border border-gray-800 rounded-2xl p-6 shadow-xl opacity-75 hover:opacity-100 transition-opacity">
@@ -334,18 +323,6 @@
                     'X-CSRFToken': getCsrfToken()
                 },
                 body: JSON.stringify({'level': level})
-            });
-        }
-
-        function setTimeoutPref(btn, minutes) {
-            updateActiveBtn('timeout-level-group', btn);
-            fetch('/api/timeout', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': getCsrfToken()
-                },
-                body: JSON.stringify({'timeout': minutes})
             });
         }
 
