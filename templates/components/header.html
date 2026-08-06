@@ -13,7 +13,7 @@
                     <div class="relative flex items-center gap-2 bg-[#111] border border-gray-800 rounded-xl p-2 focus-within:border-blue-500/50 transition-all shadow-sm">
                         <div id="project-icon-preview" class="w-8 h-8 flex shrink-0 items-center justify-center bg-gray-900 rounded-md">
                             {% if project_has_icon %}
-                                <img src="{{ url_for('get_icon', path=project_path) }}" class="w-5 h-5 object-contain">
+                                <img src="{{ url_for('project_bp.get_icon', path=project_path) }}" class="w-5 h-5 object-contain">
                             {% else %}
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-gray-600"><path d="M19.5 21a3 3 0 0 0 3-3V9a3 3 0 0 0-3-3h-5.379a.75.75 0 0 1-.53-.22L11.47 3.66A2.25 2.25 0 0 0 9.879 3H4.5a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h15Z" /><path fill-opacity="0.5" d="M1.5 10.5V18a3 3 0 0 0 3 3h15a3 3 0 0 0 3-3v-7.5H1.5Z" /></svg>
                             {% endif %}

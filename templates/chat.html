@@ -47,7 +47,7 @@
     {% with 
         is_chat_header=True,
         show_back_button=True,
-        back_url=url_for('dashboard'),
+        back_url=url_for('project_bp.dashboard'),
         show_settings=False
     %}
         {% include 'components/header.html' %}
