@@ -27,7 +27,6 @@
         ::-webkit-scrollbar-track { background: #111; }
         ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #444; }
-        
         .hidden { display: none !important; }
 
         .glass {
@@ -40,42 +39,7 @@
 </head>
 <body class="bg-[#0A0A0A] text-gray-100 min-h-screen font-sans selection:bg-blue-500/30">
     {% from "components/icon.html" import render as render_icon %}
-    
-    {% macro render_type_icon(type) %}
-    {% if type == 'python' %}
-        <svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="24" height="24" viewBox="0 0 48 48">
-<path fill="#0277BD" d="M24.047,5c-1.555,0.005-2.633,0.142-3.936,0.367c-3.848,0.67-4.549,2.077-4.549,4.67V14h9v2H15.22h-4.35c-2.636,0-4.943,1.242-5.674,4.219c-0.826,3.417-0.863,5.557,0,9.125C5.851,32.005,7.294,34,9.931,34h3.632v-5.104c0-2.966,2.686-5.896,5.764-5.896h7.236c2.523,0,5-1.862,5-4.377v-8.586c0-2.439-1.759-4.263-4.218-4.672C27.406,5.359,25.589,4.994,24.047,5z M19.063,9c0.821,0,1.5,0.677,1.5,1.502c0,0.833-0.679,1.498-1.5,1.498c-0.837,0-1.5-0.664-1.5-1.498C17.563,9.68,18.226,9,19.063,9z"></path><path fill="#FFC107" d="M23.078,43c1.555-0.005,2.633-0.142,3.936-0.367c3.848-0.67,4.549-2.077,4.549-4.67V34h-9v-2h9.343h4.35c2.636,0,4.943-1.242,5.674-4.219c0.826-3.417,0.863-5.557,0-9.125C41.274,15.995,39.831,14,37.194,14h-3.632v5.104c0,2.966-2.686,5.896-5.764,5.896h-7.236c-2.523,0-5,1.862-5,4.377v8.586c0,2.439,1.759,4.263,4.218,4.672C19.719,42.641,21.536,43.006,23.078,43z M28.063,39c-0.821,0-1.5-0.677-1.5-1.502c0-0.833,0.679-1.498,1.5-1.498c0.837,0,1.5,0.664,1.5,1.498C29.563,38.32,28.899,39,28.063,39z"></path>
-</svg>
-    {% elif type == 'nextjs' %}
-        <svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="24" height="24" viewBox="0 0 48 48">
-<path fill="#ffffff" d="M18.974,31.5c0,0.828-0.671,1.5-1.5,1.5s-1.5-0.672-1.5-1.5v-14c0-0.653,0.423-1.231,1.045-1.43 c0.625-0.198,1.302,0.03,1.679,0.563l16.777,23.704C40.617,36.709,44,30.735,44,24c0-11-9-20-20-20S4,13,4,24s9,20,20,20 c3.192,0,6.206-0.777,8.89-2.122L18.974,22.216V31.5z M28.974,16.5c0-0.828,0.671-1.5,1.5-1.5s1.5,0.672,1.5,1.5v13.84l-3-4.227 V16.5z"></path>
-</svg>
-    {% elif type == 'expojs' %}
-        <svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="24" height="24" viewBox="0 0 48 48">
-<path fill="#0277bd" d="M22.916,19.6c0.339-0.493,0.71-0.558,1.012-0.558c0.3,0,0.802,0.064,1.141,0.558	c4.418,6.017,13.579,21.891,14.426,22.755c1.255,1.28,2.977,0.483,3.976-0.969c0.986-1.43,1.259-2.434,1.259-3.504	c0-0.729-14.267-27.05-15.706-29.242C27.642,6.532,27.192,6,24.829,6H23.06c-2.359,0-2.7,0.532-4.081,2.638	C17.538,10.834,3.27,37.155,3.27,37.884c0,1.072,0.272,2.074,1.259,3.504c0.999,1.452,2.721,2.252,3.976,0.969	C9.352,41.493,18.5,25.62,22.916,19.605L22.916,19.6z"></path>
-</svg>
-    {% elif type == 'react' %}
-        <svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="24" height="24" viewBox="0 0 48 48">
-<path fill="#212121" d="M18.974,31.5c0,0.828-0.671,1.5-1.5,1.5s-1.5-0.672-1.5-1.5v-14c0-0.653,0.423-1.231,1.045-1.43 c0.625-0.198,1.302,0.03,1.679,0.563l16.777,23.704C40.617,36.709,44,30.735,44,24c0-11-9-20-20-20S4,13,4,24s9,20,20,20 c3.192,0,6.206-0.777,8.89-2.122L18.974,22.216V31.5z M28.974,16.5c0-0.828,0.671-1.5,1.5-1.5s1.5,0.672,1.5,1.5v13.84l-3-4.227 V16.5z"></path>
-</svg>
-    {% elif type == 'nodejs' %}
-        <svg width="24" height="24" viewBox="-16.5 0 289 289" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" preserveAspectRatio="xMidYMid">
-    <g>
-        <path d="M127.999999,288.463771 C124.024844,288.463771 120.314699,287.403728 116.869564,285.548656 L81.6231884,264.612838 C76.32298,261.697724 78.9730854,260.637682 80.5631458,260.107661 C87.7184259,257.72257 89.0434775,257.192547 96.4637688,252.952381 C97.2587979,252.422361 98.3188405,252.687372 99.1138718,253.217392 L126.144927,269.383024 C127.20497,269.913045 128.530021,269.913045 129.325053,269.383024 L235.064182,208.165634 C236.124225,207.635611 236.654245,206.575571 236.654245,205.250519 L236.654245,83.0807467 C236.654245,81.7556929 236.124225,80.6956526 235.064182,80.1656324 L129.325053,19.2132506 C128.26501,18.6832305 126.939959,18.6832305 126.144927,19.2132506 L20.4057954,80.1656324 C19.3457551,80.6956526 18.8157349,82.0207041 18.8157349,83.0807467 L18.8157349,205.250519 C18.8157349,206.31056 19.3457551,207.635611 20.4057954,208.165634 L49.2919247,224.861286 C64.9275364,232.811595 74.7329196,223.536234 74.7329196,214.260871 L74.7329196,93.681159 C74.7329196,92.0910985 76.0579711,90.5010358 77.9130428,90.5010358 L91.4285716,90.5010358 C93.0186343,90.5010358 94.6086948,91.8260873 94.6086948,93.681159 L94.6086948,214.260871 C94.6086948,235.196689 83.2132512,247.387164 63.3374737,247.387164 C57.2422362,247.387164 52.4720502,247.387164 38.9565214,240.761906 L11.1304347,224.861286 C4.24016581,220.886129 5.68434189e-14,213.46584 5.68434189e-14,205.515528 L5.68434189e-14,83.3457557 C5.68434189e-14,75.3954465 4.24016581,67.9751552 11.1304347,64.0000006 L116.869564,2.78260752 C123.494824,-0.927535841 132.505176,-0.927535841 139.130436,2.78260752 L244.869565,64.0000006 C251.759834,67.9751552 256,75.3954465 256,83.3457557 L256,205.515528 C256,213.46584 251.759834,220.886129 244.869565,224.861286 L139.130436,286.078676 C135.685299,287.668739 131.710145,288.463771 127.999999,288.463771 L127.999999,288.463771 Z M160.596274,204.455488 C114.219461,204.455488 104.679089,183.254659 104.679089,165.233955 C104.679089,163.643893 106.004141,162.053832 107.859212,162.053832 L121.639752,162.053832 C123.229813,162.053832 124.554864,163.113872 124.554864,164.703935 C126.674947,178.749484 132.770187,185.639753 160.861283,185.639753 C183.122154,185.639753 192.662526,180.604556 192.662526,168.67909 C192.662526,161.788821 190.012423,156.753624 155.296065,153.308489 C126.409938,150.393375 108.389235,144.033126 108.389235,120.977226 C108.389235,99.5113875 126.409938,86.7908901 156.621119,86.7908901 C190.542443,86.7908901 207.238095,98.4513472 209.358178,123.89234 C209.358178,124.687371 209.093167,125.482403 208.563147,126.277434 C208.033127,126.807454 207.238095,127.337474 206.443064,127.337474 L192.662526,127.337474 C191.337475,127.337474 190.012423,126.277434 189.747412,124.952382 C186.567289,110.376813 178.351966,105.606625 156.621119,105.606625 C132.240165,105.606625 129.325053,114.086957 129.325053,120.447205 C129.325053,128.132506 132.770187,130.5176 165.631471,134.757766 C198.227744,138.997931 213.598344,145.093169 213.598344,167.884058 C213.333333,191.20497 194.252589,204.455488 160.596274,204.455488 L160.596274,204.455488 Z" fill="#539E43">
-
-</path>
-    </g>
-</svg>
-    {% elif type == 'pypi' %}
-        {% include 'components/pypi_icon.html' ignore missing %}
-    {% else %}
-        <!-- Generic Code Fallback Icon -->
-        <svg class="w-5 h-5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <polyline points="16 18 22 12 16 6"/>
-            <polyline points="8 6 2 12 8 18"/>
-        </svg>
-    {% endif %}
-{% endmacro %}
+    {% from "components/project_type_icons.html" import render_type_icon %}
 
     <!-- Background Gradients -->
     <div class="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/5 rounded-full blur-[100px] pointer-events-none"></div>
@@ -116,32 +80,80 @@
                 {% for win in active_windows %}
                     <div class="group relative bg-[#111] border border-green-900/30 hover:border-green-500/50 rounded-2xl p-6 shadow-lg hover:shadow-green-900/10 transition-all cursor-pointer flex flex-col items-center justify-center gap-3 h-40"
                          data-title="{{ win.full_title }}" 
+                         data-path="{{ win.path }}"
                          onclick="focusProject(this.dataset.title)">
                         
-                        <!-- Project Type Icon Top Left -->
+                        <!-- Top Left Project Type Icon -->
                         {% if win.project_type and win.project_type != 'unknown' %}
-                        <div class="absolute top-3 left-3 opacity-70 group-hover:opacity-100 transition-opacity" title="{{ win.project_type | title }}">
+                        <div class="absolute top-3 left-3 opacity-80 group-hover:opacity-100 transition-opacity" title="{{ win.project_type | title }}">
                             {{ render_type_icon(win.project_type) }}
                         </div>
                         {% endif %}
 
+                        <!-- On-Card Status Badge -->
+                        <div class="expo-status-badge hidden absolute top-3 right-3 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 border border-blue-500/30 text-blue-400 z-20 shadow-sm animate-pulse">
+                            Starting...
+                        </div>
+
                         {% if win.path %}
-                        <button class="absolute top-2 right-2 p-1.5 rounded-full hover:bg-blue-500/10 hover:text-blue-400 text-gray-700 opacity-0 group-hover:opacity-100 transition-all z-10"
+                        <button class="edit-link-btn absolute top-2 right-2 p-1.5 rounded-full hover:bg-blue-500/10 hover:text-blue-400 text-gray-700 opacity-0 group-hover:opacity-100 transition-all z-10"
                              title="Edit Dev Link" 
                              data-path="{{ win.path }}"
                              data-link="{{ win.dev_link }}"
                              onclick="editDevLink(event, this)">
                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                         </button>
+
+                        {% if win.project_type == 'expojs' %}
+                        <!-- Expo Action Toolbar / Play Button -->
+                        {% if win.dev_link %}
+                        <div class="expo-running-toolbar absolute bottom-3 right-3 flex items-center bg-[#1a1a1a] border border-blue-900/40 rounded-xl overflow-hidden shadow-lg z-10">
+                            <button class="p-2 hover:bg-blue-500/20 text-blue-400 transition-all"
+                                 title="Open Terminal Viewer in Web GUI" 
+                                 data-path="{{ win.path }}"
+                                 onclick="openExpoWebTerminal(event, this)">
+                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>
+                            </button>
+                            <div class="w-[1px] h-4 bg-gray-800"></div>
+                            <button class="p-2 hover:bg-green-500/20 text-green-400 transition-all"
+                                 title="Open Expo Tunnel: {{ win.dev_link }}" 
+                                 data-link="{{ win.dev_link }}"
+                                 onclick="openDevLink(event, this)">
+                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/></svg>
+                            </button>
+                            <div class="w-[1px] h-4 bg-gray-800"></div>
+                            <button class="p-2 hover:bg-red-500/20 text-red-400 transition-all"
+                                 title="Stop Expo Tunnel" 
+                                 data-path="{{ win.path }}"
+                                 onclick="stopExpoTunnel(event, this)">
+                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                            </button>
+                        </div>
+                        {% else %}
+                        <button class="expo-play-btn absolute bottom-3 right-3 w-8 h-8 rounded-xl bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center transition-all z-10 shadow-lg group/expo active:scale-95"
+                             title="Start Expo Tunnel" 
+                             data-path="{{ win.path }}"
+                             onclick="triggerExpoTunnel(event, this)">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" class="group-hover/expo:scale-110 transition-transform"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        </button>
                         {% endif %}
+                        {% else %}
+                        <button class="absolute bottom-3 left-3 p-2 bg-[#1a1a1a] border border-green-900/30 hover:border-green-500/50 hover:bg-green-500/10 text-green-400 rounded-xl transition-all z-10 shadow-lg group/run"
+                             title="Run Project Terminal Command" 
+                             data-path="{{ win.path }}"
+                             onclick="runProject(event, this)">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="group-hover/run:scale-110 transition-transform"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        </button>
 
                         {% if win.dev_link %}
                         <button class="absolute bottom-3 right-3 p-2 bg-[#1a1a1a] border border-green-900/30 hover:border-green-500/50 hover:bg-green-500/10 text-green-400 rounded-xl transition-all z-10 shadow-lg group/link"
                              title="Open Dev Link: {{ win.dev_link }}" 
                              data-link="{{ win.dev_link }}"
                              onclick="openDevLink(event, this)">
-                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover/link:scale-110 transition-transform"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
+                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/></svg>
                         </button>
+                        {% endif %}
+                        {% endif %}
                         {% endif %}
                         
                         {{ render_icon(win.has_icon, win.path, True) }}
@@ -164,12 +176,17 @@
                          data-path="{{ project.path }}" 
                          onclick="launchProject(this.dataset.path)">
                         
-                        <!-- Project Type Icon Top Left -->
+                        <!-- Top Left Project Type Icon -->
                         {% if project.project_type and project.project_type != 'unknown' %}
-                        <div class="absolute top-3 left-3 opacity-70 group-hover:opacity-100 transition-opacity" title="{{ project.project_type | title }}">
+                        <div class="absolute top-3 left-3 opacity-80 group-hover:opacity-100 transition-opacity" title="{{ project.project_type | title }}">
                             {{ render_type_icon(project.project_type) }}
                         </div>
                         {% endif %}
+
+                        <!-- On-Card Status Badge -->
+                        <div class="expo-status-badge hidden absolute top-3 right-3 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 border border-blue-500/30 text-blue-400 z-20 shadow-sm animate-pulse">
+                            Starting...
+                        </div>
 
                         <button class="absolute top-2 right-2 p-1.5 rounded-full hover:bg-red-500/10 hover:text-red-400 text-gray-700 opacity-0 group-hover:opacity-100 transition-all z-10"
                              title="Hide Project" 
@@ -178,7 +195,7 @@
                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                         </button>
 
-                        <button class="absolute top-2 right-8 p-1.5 rounded-full hover:bg-blue-500/10 hover:text-blue-400 text-gray-700 opacity-0 group-hover:opacity-100 transition-all z-10"
+                        <button class="edit-link-btn absolute top-2 right-8 p-1.5 rounded-full hover:bg-blue-500/10 hover:text-blue-400 text-gray-700 opacity-0 group-hover:opacity-100 transition-all z-10"
                              title="Edit Dev Link" 
                              data-path="{{ project.path }}"
                              data-link="{{ project.dev_link }}"
@@ -186,13 +203,54 @@
                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                         </button>
 
+                        {% if project.project_type == 'expojs' %}
+                        {% if project.dev_link %}
+                        <div class="expo-running-toolbar absolute bottom-3 right-3 flex items-center bg-[#1a1a1a] border border-blue-900/40 rounded-xl overflow-hidden shadow-lg z-10">
+                            <button class="p-2 hover:bg-blue-500/20 text-blue-400 transition-all"
+                                 title="Open Terminal Viewer in Web GUI" 
+                                 data-path="{{ project.path }}"
+                                 onclick="openExpoWebTerminal(event, this)">
+                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>
+                            </button>
+                            <div class="w-[1px] h-4 bg-gray-800"></div>
+                            <button class="p-2 hover:bg-green-500/20 text-green-400 transition-all"
+                                 title="Open Expo Tunnel: {{ project.dev_link }}" 
+                                 data-link="{{ project.dev_link }}"
+                                 onclick="openDevLink(event, this)">
+                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/></svg>
+                            </button>
+                            <div class="w-[1px] h-4 bg-gray-800"></div>
+                            <button class="p-2 hover:bg-red-500/20 text-red-400 transition-all"
+                                 title="Stop Expo Tunnel" 
+                                 data-path="{{ project.path }}"
+                                 onclick="stopExpoTunnel(event, this)">
+                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                            </button>
+                        </div>
+                        {% else %}
+                        <button class="expo-play-btn absolute bottom-3 right-3 w-8 h-8 rounded-xl bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center transition-all z-10 shadow-lg group/expo active:scale-95"
+                             title="Start Expo Tunnel" 
+                             data-path="{{ project.path }}"
+                             onclick="triggerExpoTunnel(event, this)">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" class="group-hover/expo:scale-110 transition-transform"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        </button>
+                        {% endif %}
+                        {% else %}
+                        <button class="absolute bottom-3 left-3 p-2 bg-[#1a1a1a] border border-gray-800 hover:border-green-500/50 hover:bg-green-500/10 text-green-400 rounded-xl transition-all z-10 shadow-lg group/run"
+                             title="Run Project Terminal Command" 
+                             data-path="{{ project.path }}"
+                             onclick="runProject(event, this)">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="group-hover/run:scale-110 transition-transform"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        </button>
+
                         {% if project.dev_link %}
                         <button class="absolute bottom-3 right-3 p-2 bg-[#1a1a1a] border border-gray-800 hover:border-blue-500/50 hover:bg-blue-500/10 text-blue-400 rounded-xl transition-all z-10 shadow-lg group/link"
                              title="Open Dev Link: {{ project.dev_link }}" 
                              data-link="{{ project.dev_link }}"
                              onclick="openDevLink(event, this)">
-                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover/link:scale-110 transition-transform"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
+                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/></svg>
                         </button>
+                        {% endif %}
                         {% endif %}
 
                         {{ render_icon(project.has_icon, project.path) }}
@@ -206,50 +264,25 @@
         </div>
     </div>
 
-    <!-- Live Screen View Elements -->
-    
-    <!-- Floating Trigger Button -->
-    <button 
-        onclick="toggleScreenView()"
-        class="fixed bottom-24 right-6 w-12 h-12 bg-gray-800 hover:bg-gray-700 text-white rounded-full shadow-lg border border-gray-600 flex items-center justify-center z-[60] transition-all hover:scale-110 active:scale-95 group"
-        title="View Desktop"
-    >
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover:text-blue-400 transition-colors">
-            <rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>
-        </svg>
-    </button>
-
-    <!-- Modal Overlay -->
-    <div id="screen-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] hidden flex items-center justify-center p-4">
-        <div class="relative w-full max-w-[90vw] h-[80vh] bg-[#111] border border-gray-700 rounded-2xl overflow-hidden shadow-2xl flex flex-col animate-in fade-in zoom-in duration-200">
-            <!-- Modal Header -->
-            <div class="flex justify-between items-center px-4 py-3 border-b border-gray-800 bg-[#0A0A0A]">
-                <div class="flex items-center gap-2">
-                    <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-                    <span class="text-sm font-medium text-gray-300">Live Desktop View</span>
+    <!-- Web GUI Terminal Modal -->
+    <div id="expo-terminal-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-[120] hidden flex items-center justify-center p-4">
+        <div class="relative w-full max-w-2xl bg-[#111] border border-gray-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col h-[65vh]">
+            <div class="flex items-center justify-between px-5 py-3.5 border-b border-gray-800 bg-[#0A0A0A]">
+                <div class="flex items-center gap-2.5">
+                    <span class="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse"></span>
+                    <span id="expo-modal-title" class="text-xs font-mono text-gray-300">Expo Tunnel Terminal</span>
                 </div>
-                <button onclick="toggleScreenView()" class="p-1 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                <button onclick="closeExpoWebTerminal()" class="p-1 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                 </button>
             </div>
-            
-            <!-- Modal Content (Image) -->
-            <div class="flex-1 bg-black flex items-center justify-center overflow-hidden relative group">
-                 <img id="screen-img" class="max-w-full max-h-full object-contain" src="" alt="Loading screen...">
-                 <div class="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur px-3 py-1 rounded-full text-xs text-white/50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    Updating live...
-                 </div>
+            <div id="expo-gui-logs" class="flex-1 bg-black p-4 font-mono text-xs text-gray-300 overflow-y-auto space-y-1 select-text">
+                <div class="text-gray-500">> Connecting to project log stream...</div>
             </div>
         </div>
     </div>
 
-    <!-- Processing Overlay -->
-    <div id="processing-overlay" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex flex-col items-center justify-center">
-        <div class="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mb-4"></div>
-        <div class="text-blue-400 font-medium animate-pulse">Processing...</div>
-    </div>
-
-    <!-- Hidden Templates for JavaScript to use as a single source of truth for SVGs -->
+    <!-- Hidden Templates for JavaScript SVGs -->
     <div id="icon-templates" class="hidden">
         <template id="icon-python">{{ render_type_icon('python') }}</template>
         <template id="icon-nextjs">{{ render_type_icon('nextjs') }}</template>
@@ -262,13 +295,211 @@
 
     <script>
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        const activeExpoPollers = {};
+        let activeTerminalPoller = null;
+        let activeTerminalProject = null;
 
-        function showProcessing() {
-            document.getElementById('processing-overlay').classList.remove('hidden');
+        // --- Web GUI Terminal Viewer ---
+        function openExpoWebTerminal(event, element) {
+            event.stopPropagation();
+            const path = element.dataset.path;
+            if (!path) return;
+
+            activeTerminalProject = path;
+            const modal = document.getElementById('expo-terminal-modal');
+            const logsBox = document.getElementById('expo-gui-logs');
+            const titleSpan = document.getElementById('expo-modal-title');
+            
+            modal.classList.remove('hidden');
+            logsBox.innerHTML = '<div class="text-gray-500">> Loading terminal logs...</div>';
+
+            const fetchLogs = async () => {
+                try {
+                    const res = await fetch('/api/expo_progress?path=' + encodeURIComponent(path));
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        if (data.project_name) {
+                            titleSpan.textContent = `Expo Terminal [${data.project_name}]`;
+                        }
+                        if (data.logs && data.logs.length > 0) {
+                            logsBox.innerHTML = data.logs.map(l => `<div class="leading-relaxed">> ${escapeHtml(l)}</div>`).join('');
+                            logsBox.scrollTop = logsBox.scrollHeight;
+                        } else {
+                            logsBox.innerHTML = '<div class="text-gray-500">> Waiting for output from this project...</div>';
+                        }
+                    }
+                } catch (e) {
+                    console.error("Log fetch error", e);
+                }
+            };
+
+            fetchLogs();
+            if (activeTerminalPoller) clearInterval(activeTerminalPoller);
+            activeTerminalPoller = setInterval(fetchLogs, 1200);
         }
 
-        function hideProcessing() {
-            document.getElementById('processing-overlay').classList.add('hidden');
+        function closeExpoWebTerminal() {
+            document.getElementById('expo-terminal-modal').classList.add('hidden');
+            if (activeTerminalPoller) {
+                clearInterval(activeTerminalPoller);
+                activeTerminalPoller = null;
+            }
+            activeTerminalProject = null;
+        }
+
+        // --- Stop Expo Tunnel ---
+        async function stopExpoTunnel(event, element) {
+            event.stopPropagation();
+            const path = element.dataset.path;
+            if (!path) return;
+
+            const card = element.closest('.project-button, div[data-title]');
+            const badge = card ? card.querySelector('.expo-status-badge') : null;
+
+            if (badge) {
+                badge.classList.remove('hidden');
+                badge.textContent = 'Stopping...';
+                badge.className = 'expo-status-badge absolute top-3 right-3 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/10 border border-red-500/30 text-red-400 z-20 shadow-sm animate-pulse';
+            }
+
+            try {
+                const res = await fetch('/api/stop_expo_tunnel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body: JSON.stringify({ path: path })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    if (activeExpoPollers[path]) {
+                        clearInterval(activeExpoPollers[path]);
+                        delete activeExpoPollers[path];
+                    }
+                    location.reload();
+                }
+            } catch (err) {
+                console.error("Error stopping Expo tunnel:", err);
+            }
+        }
+
+        // --- Expo Tunnel Unified Logic with 1-Tunnel Switch Prompt ---
+        async function triggerExpoTunnel(event, element) {
+            event.stopPropagation();
+            const path = element.dataset.path;
+            if (!path || path === "undefined") {
+                alert("Invalid project path.");
+                return;
+            }
+
+            // Check if another Expo tunnel is already active
+            try {
+                const checkRes = await fetch('/api/expo_active_tunnel');
+                const checkData = await checkRes.json();
+                if (checkData.status === 'success' && checkData.has_active && checkData.active_path !== path) {
+                    const confirmSwitch = confirm(
+                        `You can only have 1 tunnel open at a time.\n\n` +
+                        `Project "${checkData.active_name}" currently has an active tunnel.\n\n` +
+                        `Would you like to stop "${checkData.active_name}" and switch to this project?`
+                    );
+                    if (!confirmSwitch) {
+                        return; // User cancelled
+                    }
+                    // Stop current active tunnel first
+                    await fetch('/api/stop_expo_tunnel', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                        body: JSON.stringify({ path: checkData.active_path })
+                    });
+                }
+            } catch (checkErr) {
+                console.error("Check active tunnel error:", checkErr);
+            }
+
+            const card = element.closest('.project-button, div[data-title]');
+            const badge = card ? card.querySelector('.expo-status-badge') : null;
+            const playBtn = card ? card.querySelector('.expo-play-btn') : null;
+
+            if (playBtn) {
+                playBtn.classList.add('hidden');
+            }
+
+            if (badge) {
+                badge.classList.remove('hidden');
+                badge.textContent = 'Starting...';
+                badge.className = 'expo-status-badge absolute top-3 right-3 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 border border-blue-500/30 text-blue-400 z-20 shadow-sm animate-pulse';
+            }
+
+            fetch('/api/open_expo_tunnel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                body: JSON.stringify({ path: path })
+            }).then(r => r.json()).then(data => {
+                if (data.status === 'success' && data.tunnel_url) {
+                    if (badge) {
+                        badge.textContent = 'Ready ✓';
+                        badge.className = 'expo-status-badge absolute top-3 right-3 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/10 border border-green-500/30 text-green-400 z-20 shadow-sm';
+                    }
+                    window.open(data.tunnel_url, '_blank');
+                    location.reload();
+                }
+            }).catch(err => {
+                console.error("Error triggering Expo tunnel:", err);
+                if (playBtn) playBtn.classList.remove('hidden');
+            });
+
+            if (activeExpoPollers[path]) clearInterval(activeExpoPollers[path]);
+            activeExpoPollers[path] = setInterval(async () => {
+                try {
+                    const res = await fetch('/api/expo_progress?path=' + encodeURIComponent(path));
+                    const info = await res.json();
+                    if (info.status === 'success' && badge) {
+                        if (info.message && info.state !== 'ready') {
+                            badge.textContent = info.message.replace('...', '');
+                        }
+                        if (info.state === 'ready' && info.url) {
+                            badge.textContent = 'Ready ✓';
+                            badge.className = 'expo-status-badge absolute top-3 right-3 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/10 border border-green-500/30 text-green-400 z-20 shadow-sm';
+                            clearInterval(activeExpoPollers[path]);
+                            delete activeExpoPollers[path];
+                            window.open(info.url, '_blank');
+                            setTimeout(() => location.reload(), 1500);
+                        }
+                    }
+                } catch (pollErr) {
+                    console.error("Poll error", pollErr);
+                }
+            }, 1200);
+        }
+
+        function escapeHtml(text) {
+            return text.replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">");
+        }
+
+        // --- Run Project Logic (Non-Expo) ---
+        async function runProject(event, element) {
+            event.stopPropagation();
+            const path = element.dataset.path;
+            if (!path || path === "undefined") {
+                alert("This project does not have a valid path.");
+                return;
+            }
+            try {
+                const response = await fetch('/api/run_project', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body: JSON.stringify({ path: path }),
+                });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    if (data.already_running) {
+                        alert(data.message);
+                    }
+                } else {
+                    alert("Failed to run project: " + data.message);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert("An error occurred while running the project.");
+            }
         }
 
         // --- Dev Link Logic ---
@@ -280,12 +511,10 @@
                 return;
             }
             const currentLink = element.dataset.link || "";
-            
             const newLink = prompt("Enter development link for this project (leave blank to remove):", currentLink);
-            if (newLink === null) return; // Cancelled
+            if (newLink === null) return;
             
             try {
-                showProcessing();
                 const response = await fetch('/api/project_link', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
@@ -293,22 +522,21 @@
                 });
                 if((await response.json()).status === 'success') {
                     location.reload(); 
-                } else {
-                    hideProcessing();
                 }
             } catch (error) { 
                 console.error('Error:', error); 
-                hideProcessing();
             }
         }
 
         function openDevLink(event, element) {
             event.stopPropagation();
             let link = element.dataset.link;
-            if (link && !link.startsWith('http://') && !link.startsWith('https://')) {
-                link = 'http://' + link;
+            if (link) {
+                if (!link.startsWith('http://') && !link.startsWith('https://')) {
+                    link = 'http://' + link;
+                }
+                window.open(link, '_blank');
             }
-            window.open(link, '_blank');
         }
 
         // --- Search Logic ---
@@ -319,7 +547,7 @@
                 let name = button.dataset.name; 
                 if (name.includes(filter)) {
                     button.classList.remove('hidden');
-                    button.style.display = 'flex'; // Restore flex layout
+                    button.style.display = 'flex';
                 } else {
                     button.classList.add('hidden');
                     button.style.display = 'none';
@@ -330,23 +558,19 @@
         // --- Launch Logic ---
         async function launchProject(path) {
             try {
-                showProcessing();
                 const response = await fetch('/launch', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
                     body: JSON.stringify({ path: path }),
                 });
                 const data = await response.json();
-                
                 if(data.status === 'success') {
                     window.location.href = '/chat?project=' + encodeURIComponent(data.project_name);
                 } else {
-                    hideProcessing();
                     alert("Launch failed: " + data.message);
                 }
             } catch (error) { 
-                console.error('Error:', error);
-                hideProcessing();
+                console.error('Error:', error); 
                 alert("An error occurred while launching.");
             }
         }
@@ -354,23 +578,19 @@
         // --- Focus Logic ---
         async function focusProject(title) {
             try {
-                showProcessing();
                 const response = await fetch('/focus', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
                     body: JSON.stringify({ title: title }),
                 });
                 const data = await response.json();
-                
                 if (data.status === 'success') {
                     window.location.href = '/chat?project=' + encodeURIComponent(data.project_name);
                 } else {
-                   hideProcessing();
-                   alert("Could not focus window: " + data.message);
+                    alert("Could not focus window: " + data.message);
                 }
             } catch (error) { 
-                console.error('Error:', error);
-                hideProcessing();
+                console.error('Error:', error); 
                 alert("An error occurred while focusing.");
             }
         }
@@ -379,9 +599,7 @@
         async function ignoreProject(event, element) {
             event.stopPropagation(); 
             if(!confirm("Hide this project?")) return;
-            
             const path = element.dataset.path;
-
             try {
                 const response = await fetch('/ignore', {
                     method: 'POST',
@@ -396,9 +614,7 @@
         function getTypeIconSvg(type) {
             if (!type) type = 'unknown';
             const template = document.getElementById('icon-' + type);
-            if (template) {
-                return template.innerHTML;
-            }
+            if (template) return template.innerHTML;
             return document.getElementById('icon-unknown').innerHTML;
         }
 
@@ -409,7 +625,6 @@
             try {
                 const response = await fetch('/api/active');
                 const windows = await response.json();
-                
                 const grid = document.getElementById('active-grid');
                 const section = document.getElementById('active-section');
 
@@ -420,8 +635,6 @@
                 }
 
                 section.classList.remove('hidden');
-                
-                // Rebuild Grid HTML with updated SVGs
                 grid.innerHTML = windows.map(win => {
                     let iconHtml = win.has_icon 
                         ? `<img class="w-10 h-10 object-contain" src="/get_icon?path=${encodeURIComponent(win.path)}" alt="Icon">` 
@@ -430,9 +643,10 @@
                     let safeTitle = win.full_title.replace(/"/g, '"');
                     let safePath = win.path ? win.path.replace(/"/g, '"') : '';
                     let devLinkAttr = win.dev_link ? win.dev_link.replace(/"/g, '"') : '';
+                    let isExpo = win.project_type === 'expojs';
                     
                     let typeIconHtml = (win.project_type && win.project_type !== 'unknown') ? `
-                        <div class="absolute top-3 left-3 opacity-70 group-hover:opacity-100 transition-opacity" title="${win.project_type}">
+                        <div class="absolute top-3 left-3 opacity-80 group-hover:opacity-100 transition-opacity" title="${win.project_type}">
                             ${getTypeIconSvg(win.project_type)}
                         </div>
                     ` : '';
@@ -447,22 +661,75 @@
                         </button>
                     ` : '';
 
-                    let openLinkBtn = win.dev_link ? `
-                        <button class="absolute bottom-3 right-3 p-2 bg-[#1a1a1a] border border-green-900/30 hover:border-green-500/50 hover:bg-green-500/10 text-green-400 rounded-xl transition-all z-10 shadow-lg group/link"
-                             title="Open Dev Link: ${devLinkAttr}" 
-                             data-link="${devLinkAttr}"
-                             onclick="openDevLink(event, this)">
-                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover/link:scale-110 transition-transform"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
-                        </button>
-                    ` : '';
+                    let actionBtns = '';
+                    if (isExpo && win.path) {
+                        if (win.dev_link) {
+                            actionBtns = `
+                                <div class="expo-running-toolbar absolute bottom-3 right-3 flex items-center bg-[#1a1a1a] border border-blue-900/40 rounded-xl overflow-hidden shadow-lg z-10">
+                                    <button class="p-2 hover:bg-blue-500/20 text-blue-400 transition-all"
+                                         title="Open Terminal Viewer in Web GUI" 
+                                         data-path="${safePath}"
+                                         onclick="openExpoWebTerminal(event, this)">
+                                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>
+                                    </button>
+                                    <div class="w-[1px] h-4 bg-gray-800"></div>
+                                    <button class="p-2 hover:bg-green-500/20 text-green-400 transition-all"
+                                         title="Open Expo Tunnel: ${devLinkAttr}" 
+                                         data-link="${devLinkAttr}"
+                                         onclick="openDevLink(event, this)">
+                                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/></svg>
+                                    </button>
+                                    <div class="w-[1px] h-4 bg-gray-800"></div>
+                                    <button class="p-2 hover:bg-red-500/20 text-red-400 transition-all"
+                                         title="Stop Expo Tunnel" 
+                                         data-path="${safePath}"
+                                         onclick="stopExpoTunnel(event, this)">
+                                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                                    </button>
+                                </div>
+                            `;
+                        } else {
+                            actionBtns = `
+                                <button class="expo-play-btn absolute bottom-3 right-3 w-8 h-8 rounded-xl bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center transition-all z-10 shadow-lg group/expo active:scale-95"
+                                     title="Start Expo Tunnel" 
+                                     data-path="${safePath}"
+                                     onclick="triggerExpoTunnel(event, this)">
+                                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" class="group-hover/expo:scale-110 transition-transform"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                                </button>
+                            `;
+                        }
+                    } else {
+                        let runBtn = win.path ? `
+                            <button class="absolute bottom-3 left-3 p-2 bg-[#1a1a1a] border border-green-900/30 hover:border-green-500/50 hover:bg-green-500/10 text-green-400 rounded-xl transition-all z-10 shadow-lg group/run"
+                                 title="Run Project Terminal Command" 
+                                 data-path="${safePath}"
+                                 onclick="runProject(event, this)">
+                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="group-hover/run:scale-110 transition-transform"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                            </button>
+                        ` : '';
+
+                        let openLinkBtn = win.dev_link ? `
+                            <button class="absolute bottom-3 right-3 p-2 bg-[#1a1a1a] border border-green-900/30 hover:border-green-500/50 hover:bg-green-500/10 text-green-400 rounded-xl transition-all z-10 shadow-lg group/link"
+                                 title="Open Dev Link: ${devLinkAttr}" 
+                                 data-link="${devLinkAttr}"
+                                 onclick="openDevLink(event, this)">
+                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/></svg>
+                            </button>
+                        ` : '';
+                        actionBtns = runBtn + openLinkBtn;
+                    }
 
                     return `
                     <div class="group relative bg-[#111] border border-green-900/30 hover:border-green-500/50 rounded-2xl p-6 shadow-lg hover:shadow-green-900/10 transition-all cursor-pointer flex flex-col items-center justify-center gap-3 h-40"
                          data-title="${safeTitle}" 
+                         data-path="${safePath}"
                          onclick="focusProject(this.dataset.title)">
                         ${typeIconHtml}
+                        <div class="expo-status-badge hidden absolute top-3 right-3 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 border border-blue-500/30 text-blue-400 z-20 shadow-sm animate-pulse">
+                            Starting...
+                        </div>
                         ${editLinkBtn}
-                        ${openLinkBtn}
+                        ${actionBtns}
                         ${iconHtml}
                         <div class="text-sm font-medium text-gray-300 group-hover:text-green-400 text-center line-clamp-2 transition-colors">
                             ${win.name}
@@ -472,50 +739,6 @@
 
             } catch (e) { console.error("Polling error", e); }
         }
-
-        // --- Live Screen View Logic ---
-        let screenInterval = null;
-        const screenModal = document.getElementById('screen-modal');
-        const screenImg = document.getElementById('screen-img');
-
-        function toggleScreenView() {
-            const isHidden = screenModal.classList.contains('hidden');
-            if (isHidden) {
-                screenModal.classList.remove('hidden');
-                startScreenStream();
-            } else {
-                screenModal.classList.add('hidden');
-                stopScreenStream();
-            }
-        }
-
-        function startScreenStream() {
-            stopScreenStream(); // clear any existing
-            refreshScreen();
-            screenInterval = setInterval(refreshScreen, 1000); // 1 update per second
-        }
-
-        function stopScreenStream() {
-            if (screenInterval) clearInterval(screenInterval);
-            screenInterval = null;
-        }
-
-        function refreshScreen() {
-            // timestamp to prevent caching
-            // Using .onload to avoid flickering if possible, though simple src replace is standard for MJPEG-like behavior
-            const tempImg = new Image();
-            tempImg.onload = () => {
-                screenImg.src = tempImg.src;
-            };
-            tempImg.src = '/api/screenshot?t=' + new Date().getTime();
-        }
-        
-        // Close modal on click outside
-        screenModal.addEventListener('click', (e) => {
-            if (e.target === screenModal) {
-                toggleScreenView();
-            }
-        });
     </script>
 </body>
 </html>

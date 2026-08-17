@@ -102,10 +102,12 @@
                             </button>
                             {% endif %}
 
-                            {% if quest.dev_link %}
+                            {% if quest.dev_link or quest.project_type == 'expojs' %}
                             <button class="absolute bottom-3 right-3 p-2 bg-[#1a1a1a] border border-green-900/30 hover:border-green-500/50 hover:bg-green-500/10 text-green-400 rounded-xl transition-all z-10 shadow-lg group/link"
-                                 title="Open Dev Link: {{ quest.dev_link }}" 
+                                 title="Open Dev Link: {{ quest.dev_link or 'Expo Tunnel' }}" 
                                  data-link="{{ quest.dev_link }}"
+                                 data-path="{{ quest.path }}"
+                                 data-type="{{ quest.project_type }}"
                                  onclick="openDevLink(event, this)">
                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover/link:scale-110 transition-transform"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
                             </button>
@@ -149,7 +151,7 @@
                                 </div>
                             </div>
                         </div>
-                    {% else %}
+                    {% else % block %}
                         <!-- Pinned Inactive Quests (Shown on the Right) -->
                         <div class="project-button group relative bg-[#111] border border-gray-800 hover:border-yellow-500/50 rounded-2xl p-5 shadow-lg hover:shadow-yellow-900/10 transition-all cursor-pointer flex flex-col items-center justify-between gap-2 min-h-[15rem]"
                              data-name="{{ quest.name|lower }}" 
@@ -178,10 +180,12 @@
                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                             </button>
 
-                            {% if quest.dev_link %}
+                            {% if quest.dev_link or quest.project_type == 'expojs' %}
                             <button class="absolute bottom-3 right-3 p-2 bg-[#1a1a1a] border border-gray-800 hover:border-blue-500/50 hover:bg-blue-500/10 text-blue-400 rounded-xl transition-all z-10 shadow-lg group/link"
-                                 title="Open Dev Link: {{ quest.dev_link }}" 
+                                 title="Open Dev Link: {{ quest.dev_link or 'Expo Tunnel' }}" 
                                  data-link="{{ quest.dev_link }}"
+                                 data-path="{{ quest.path }}"
+                                 data-type="{{ quest.project_type }}"
                                  onclick="openDevLink(event, this)">
                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover/link:scale-110 transition-transform"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
                             </button>
@@ -262,10 +266,12 @@
                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                         </button>
 
-                        {% if project.dev_link %}
+                        {% if project.dev_link or project.project_type == 'expojs' %}
                         <button class="absolute bottom-3 right-3 p-2 bg-[#1a1a1a] border border-gray-800 hover:border-blue-500/50 hover:bg-blue-500/10 text-blue-400 rounded-xl transition-all z-10 shadow-lg group/link"
-                             title="Open Dev Link: {{ project.dev_link }}" 
+                             title="Open Dev Link: {{ project.dev_link or 'Expo Tunnel' }}" 
                              data-link="{{ project.dev_link }}"
+                             data-path="{{ project.path }}"
+                             data-type="{{ project.project_type }}"
                              onclick="openDevLink(event, this)">
                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover/link:scale-110 transition-transform"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
                         </button>
@@ -393,13 +399,38 @@
             }
         }
 
-        function openDevLink(event, element) {
+        async function openDevLink(event, element) {
             event.stopPropagation();
+            const type = element.dataset.type;
+            const path = element.dataset.path;
             let link = element.dataset.link;
-            if (link && !link.startsWith('http://') && !link.startsWith('https://')) {
-                link = 'http://' + link;
+
+            if (type === 'expojs' || (!link && type === 'expojs')) {
+                try {
+                    showProcessing();
+                    const response = await fetch('/api/open_expo_tunnel', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                        body: JSON.stringify({ path: path })
+                    });
+                    const data = await response.json();
+                    hideProcessing();
+                    if (data.status === 'success' && data.tunnel_url) {
+                        window.open(data.tunnel_url, '_blank');
+                        return;
+                    }
+                } catch (err) {
+                    console.error('Error fetching Expo tunnel:', err);
+                    hideProcessing();
+                }
             }
-            window.open(link, '_blank');
+
+            if (link) {
+                if (!link.startsWith('http://') && !link.startsWith('https://') && !link.startsWith('exp://')) {
+                    link = 'http://' + link;
+                }
+                window.open(link, '_blank');
+            }
         }
 
         // --- Search Logic ---
@@ -436,7 +467,7 @@
                     alert("Launch failed: " + data.message);
                 }
             } catch (error) { 
-                console.error('Error:', error);
+                console.error('Error:', error); 
                 hideProcessing();
                 alert("An error occurred while launching.");
             }
@@ -460,7 +491,7 @@
                    alert("Could not focus window: " + data.message);
                 }
             } catch (error) { 
-                console.error('Error:', error);
+                console.error('Error:', error); 
                 hideProcessing();
                 alert("An error occurred while focusing.");
             }
@@ -601,6 +632,7 @@
                     let safePath = win.path ? win.path.replace(/"/g, '"') : '';
                     let devLinkAttr = win.dev_link ? win.dev_link.replace(/"/g, '"') : '';
                     let safeName = win.name ? win.name.toLowerCase().replace(/"/g, '"') : '';
+                    let projType = win.project_type || 'unknown';
                     
                     let pinBtn = win.path ? `
                         <button class="absolute top-2 right-2 p-1.5 rounded-full hover:bg-yellow-500/10 ${win.is_pinned ? 'text-yellow-400' : 'text-gray-700 hover:text-yellow-400'} opacity-0 group-hover:opacity-100 transition-all z-10"
@@ -621,12 +653,14 @@
                         </button>
                     ` : '';
 
-                    let openLinkBtn = win.dev_link ? `
+                    let openLinkBtn = (win.dev_link || win.project_type === 'expojs') ? `
                         <button class="absolute bottom-3 right-3 p-2 bg-[#1a1a1a] border border-green-900/30 hover:border-green-500/50 hover:bg-green-500/10 text-green-400 rounded-xl transition-all z-10 shadow-lg group/link"
-                             title="Open Dev Link: ${devLinkAttr}" 
+                             title="Open Dev Link: ${devLinkAttr || 'Expo Tunnel'}" 
                              data-link="${devLinkAttr}"
+                             data-path="${safePath}"
+                             data-type="${projType}"
                              onclick="openDevLink(event, this)">
-                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover/link:scale-110 transition-transform"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
+                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover/link:scale-110 transition-transform"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9 credit"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
                         </button>
                     ` : '';
 
@@ -694,6 +728,7 @@
                     let safePath = quest.path ? quest.path.replace(/"/g, '"') : '';
                     let devLinkAttr = quest.dev_link ? quest.dev_link.replace(/"/g, '"') : '';
                     let safeName = quest.name ? quest.name.toLowerCase().replace(/"/g, '"') : '';
+                    let projType = quest.project_type || 'unknown';
 
                     let hideBtn = `
                         <button class="absolute top-2 left-2 p-1.5 rounded-full hover:bg-red-500/10 hover:text-red-400 text-gray-700 opacity-0 group-hover:opacity-100 transition-all z-10"
@@ -723,10 +758,12 @@
                         </button>
                     `;
 
-                    let openLinkBtn = quest.dev_link ? `
+                    let openLinkBtn = (quest.dev_link || quest.project_type === 'expojs') ? `
                         <button class="absolute bottom-3 right-3 p-2 bg-[#1a1a1a] border border-gray-800 hover:border-blue-500/50 hover:bg-blue-500/10 text-blue-400 rounded-xl transition-all z-10 shadow-lg group/link"
-                             title="Open Dev Link: ${devLinkAttr}" 
+                             title="Open Dev Link: ${devLinkAttr || 'Expo Tunnel'}" 
                              data-link="${devLinkAttr}"
+                             data-path="${safePath}"
+                             data-type="${projType}"
                              onclick="openDevLink(event, this)">
                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover/link:scale-110 transition-transform"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
                         </button>
