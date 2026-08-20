@@ -23,10 +23,10 @@
     </script>
     <style>
         /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #111; }
-        ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #444; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0A0A0A; }
+        ::-webkit-scrollbar-thumb { background: #2A2A2A; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3E3E3E; }
         
         /* Mobile Height Fix */
         .h-dvh { height: 100dvh; }
@@ -37,6 +37,11 @@
             -webkit-backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.05);
         }
+
+        .diff-added { background-color: rgba(34, 197, 94, 0.12); color: #4ade80; border-left: 3px solid #22c55e; }
+        .diff-deleted { background-color: rgba(239, 68, 68, 0.12); color: #f87171; border-left: 3px solid #ef4444; }
+        .diff-header { background-color: rgba(59, 130, 246, 0.1); color: #60a5fa; border-left: 3px solid #3b82f6; }
+        .diff-meta { color: #9ca3af; }
     </style>
 </head>
 <body class="bg-[#0A0A0A] text-gray-100 h-dvh flex flex-col font-sans selection:bg-blue-500/30 overflow-hidden">
@@ -94,7 +99,7 @@
     <div id="view-queue" class="hidden flex-1 flex flex-col min-h-0 w-full max-w-3xl mx-auto p-4 z-10">
         <div class="bg-[#111] border border-gray-800 rounded-3xl p-6 shadow-2xl flex flex-col gap-4 h-full">
             <div class="bg-[#0A0A0A] border border-gray-800 rounded-2xl p-4 flex items-center gap-3 shadow-inner shrink-0">
-                <div id="status-indicator" class="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"></div>
+                <div id="status-indicator" class="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(160,185,129,0.5)]"></div>
                 <span id="status-text" class="text-xs font-bold text-emerald-400 tracking-wider">STATUS: IDLE</span>
             </div>
             <div class="border border-gray-800 rounded-2xl overflow-hidden flex-1 flex flex-col">
@@ -109,14 +114,190 @@
         </div>
     </div>
 
-    <!-- Floating Trigger Button -->
-    <button onclick="toggleScreenView()" class="fixed bottom-24 right-6 w-12 h-12 bg-gray-800 hover:bg-gray-700 text-white rounded-full shadow-lg border border-gray-600 flex items-center justify-center z-[60] transition-all hover:scale-110 active:scale-95 group" title="View Desktop">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover:text-blue-400 transition-colors">
-            <rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>
-        </svg>
-    </button>
+    <!-- Floating Buttons Container -->
+    <div class="fixed bottom-24 right-6 flex items-center gap-3 z-[60]">
+        <!-- Git Source Control Floating Button -->
+        <button id="btn-git-diff" onclick="openGitDiffModal()" class="relative w-12 h-12 bg-gray-800 hover:bg-gray-700 text-white rounded-full shadow-lg border border-gray-600 flex items-center justify-center transition-all hover:scale-110 active:scale-95 group hidden" title="Source Control / Git Diffs">
+            <!-- VSCode Git Branch / Source Control Icon -->
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover:text-emerald-400 transition-colors">
+                <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 9v12"/><path d="M18 9a9 9 0 0 0-9 9"/>
+            </svg>
+            <!-- Badge on bottom right -->
+            <span id="git-badge" class="absolute -bottom-1 -right-1 min-w-[20px] h-[20px] px-1 bg-blue-600 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center shadow-md border border-gray-900 leading-none">
+                0
+            </span>
+        </button>
 
-    <!-- Modal Overlay -->
+        <!-- Floating Screen View Trigger Button -->
+        <button onclick="toggleScreenView()" class="w-12 h-12 bg-gray-800 hover:bg-gray-700 text-white rounded-full shadow-lg border border-gray-600 flex items-center justify-center transition-all hover:scale-110 active:scale-95 group" title="View Desktop">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover:text-blue-400 transition-colors">
+                <rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Enhanced Git Source Control Modal -->
+    <div id="git-diff-modal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-[110] hidden flex items-center justify-center p-2 sm:p-4 md:p-6">
+        <div class="relative w-full max-w-6xl h-[94vh] sm:h-[88vh] bg-[#111] border border-gray-700/80 rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl flex flex-col animate-in fade-in zoom-in duration-200">
+            <!-- Modal Header -->
+            <div class="flex flex-col border-b border-gray-800 bg-[#0C0C0C]">
+                <div class="flex justify-between items-center px-4 sm:px-6 py-3">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <div class="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 9v12"/><path d="M18 9a9 9 0 0 0-9 9"/></svg>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span id="diff-modal-project-name" class="font-bold text-gray-100 text-sm truncate">Git Workspace</span>
+                                <span id="diff-modal-branch-badge" class="px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center gap-1">
+                                    <svg class="w-3 h-3 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+                                    <span id="git-branch-name">main</span>
+                                </span>
+                                <span id="diff-modal-file-count-badge" class="px-2 py-0.5 rounded-md text-xs font-semibold bg-gray-800 border border-gray-700 text-gray-300">0 changes</span>
+                            </div>
+                            <div class="text-[11px] text-gray-400 flex items-center gap-2 mt-0.5">
+                                <span id="diff-summary-additions" class="text-emerald-400 font-mono font-medium">+0</span>
+                                <span id="diff-summary-deletions" class="text-red-400 font-mono font-medium">-0</span>
+                                <span class="text-gray-600 hidden sm:inline">•</span>
+                                <span id="diff-modal-project-path" class="truncate max-w-[200px] sm:max-w-md hidden sm:inline text-gray-500 font-mono"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        <button onclick="refreshGitAll()" class="p-2 hover:bg-gray-800 rounded-xl text-gray-400 hover:text-white transition-colors" title="Refresh Git Data">
+                            <svg id="git-refresh-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+                        </button>
+                        <button onclick="closeGitDiffModal()" class="p-2 hover:bg-gray-800 rounded-xl text-gray-400 hover:text-white transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Sub-nav Tabs: Changes vs Commits History -->
+                <div class="flex px-4 sm:px-6 gap-2 border-t border-gray-800/80 bg-[#0E0E0E] text-xs">
+                    <button id="git-subtab-changes" onclick="switchGitSubTab('changes')" class="py-2.5 px-3 font-semibold border-b-2 border-blue-500 text-blue-400 flex items-center gap-2 transition-all">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        <span>Changes & Diff</span>
+                        <span id="subtab-changes-badge" class="px-1.5 py-0.2 rounded-full text-[10px] bg-blue-500/20 text-blue-300 font-mono">0</span>
+                    </button>
+                    <button id="git-subtab-history" onclick="switchGitSubTab('history')" class="py-2.5 px-3 font-semibold border-b-2 border-transparent text-gray-400 hover:text-gray-200 flex items-center gap-2 transition-all">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+                        <span>Past Commits</span>
+                        <span id="subtab-commits-badge" class="px-1.5 py-0.2 rounded-full text-[10px] bg-gray-800 text-gray-300 font-mono">0</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- View 1: Working Changes & Diff + Commit/Push -->
+            <div id="git-view-changes" class="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden bg-[#0A0A0A]">
+                <!-- Left Sidebar: Commit Box & Changed Files -->
+                <div class="w-full md:w-84 lg:w-96 border-b md:border-b-0 md:border-r border-gray-800 flex flex-col shrink-0 bg-[#0E0E0E]">
+                    <!-- Commit & Push Action Panel -->
+                    <div class="p-3.5 border-b border-gray-800/80 bg-[#121212] flex flex-col gap-2.5 shrink-0 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
+                                <svg class="w-3.5 h-3.5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+                                Commit & Push Changes
+                            </span>
+                            <span id="commit-status-pill" class="text-[10px] text-gray-500 font-mono">All files staged</span>
+                        </div>
+
+                        <div class="relative">
+                            <textarea 
+                                id="git-commit-message-input" 
+                                placeholder="Commit message (e.g., feat: update chat git UI)..." 
+                                class="w-full bg-[#181818] border border-gray-700/70 rounded-xl p-2.5 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none h-[64px] transition-all font-sans leading-relaxed"
+                            ></textarea>
+                        </div>
+
+                        <div class="flex items-center justify-between gap-2">
+                            <label class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-400 select-none hover:text-gray-200 transition-colors">
+                                <input type="checkbox" id="git-auto-push-checkbox" checked class="rounded bg-gray-800 border-gray-700 text-blue-600 focus:ring-0 focus:ring-offset-0">
+                                <span>Push to remote</span>
+                            </label>
+                            <button 
+                                id="btn-git-commit-push"
+                                onclick="handleCommitAndPush()" 
+                                class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-md hover:shadow-emerald-500/20 active:scale-95 transition-all disabled:opacity-50 disabled:pointer-events-none"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                                <span>Commit & Push</span>
+                            </button>
+                        </div>
+
+                        <!-- Feedback banner -->
+                        <div id="commit-feedback-msg" class="hidden text-[11px] p-2 rounded-lg leading-tight"></div>
+                    </div>
+
+                    <!-- Filter Input -->
+                    <div class="p-2.5 border-b border-gray-800/80 bg-[#0F0F0F] flex items-center gap-2">
+                        <div class="relative flex-1">
+                            <input 
+                                id="diff-search-input" 
+                                type="text" 
+                                placeholder="Filter changed files..." 
+                                class="w-full bg-[#181818] border border-gray-700/60 rounded-lg pl-7 pr-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-blue-500 transition-all placeholder-gray-500 font-mono"
+                                oninput="renderDiffFileList()"
+                            />
+                            <svg class="w-3.5 h-3.5 text-gray-500 absolute left-2.5 top-2.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                        </div>
+                    </div>
+
+                    <!-- Changed Files List -->
+                    <div id="diff-file-list" class="flex-1 overflow-y-auto divide-y divide-gray-800/40 p-1">
+                        <!-- File item rows injected here -->
+                    </div>
+                </div>
+
+                <!-- Right Area: Diff Viewer -->
+                <div class="flex-1 flex flex-col min-h-0 bg-[#0A0A0A] overflow-hidden">
+                    <div class="px-4 py-2.5 bg-[#0F0F0F] border-b border-gray-800 flex items-center justify-between shrink-0">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span id="selected-file-status-badge" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono">M</span>
+                            <span id="selected-file-name" class="text-xs font-mono text-gray-200 truncate font-semibold">Select a file to inspect diff</span>
+                        </div>
+                        <div id="selected-file-stats" class="text-xs font-mono text-gray-400 shrink-0"></div>
+                    </div>
+                    <div class="flex-1 overflow-auto p-4 font-mono text-xs text-gray-300" id="diff-content-area">
+                        <div class="h-full flex items-center justify-center text-gray-600 italic">
+                            Select a file on the left to preview changes
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- View 2: Past Commits History List -->
+            <div id="git-view-history" class="hidden flex-1 flex flex-col min-h-0 overflow-hidden bg-[#0A0A0A]">
+                <!-- History Toolbar -->
+                <div class="p-3 sm:px-6 border-b border-gray-800 bg-[#0E0E0E] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0">
+                    <div class="relative flex-1 max-w-md">
+                        <input 
+                            id="commit-search-input" 
+                            type="text" 
+                            placeholder="Filter commits by message, hash, or author..." 
+                            class="w-full bg-[#181818] border border-gray-700/70 rounded-xl pl-8 pr-3 py-2 text-xs text-gray-200 focus:outline-none focus:border-blue-500 transition-all placeholder-gray-500"
+                            oninput="renderCommitsList()"
+                        />
+                        <svg class="w-4 h-4 text-gray-500 absolute left-2.5 top-2.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    </div>
+                    <div class="flex items-center gap-2 text-xs text-gray-400 justify-between sm:justify-end">
+                        <span id="commit-count-label" class="font-mono text-gray-400">Loading commits...</span>
+                        <button onclick="loadGitCommits()" class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg flex items-center gap-1.5 transition-all text-xs border border-gray-700">
+                            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Commits Timeline List Container -->
+                <div id="commits-list-container" class="flex-1 overflow-y-auto p-3 sm:p-6 divide-y divide-gray-800/60">
+                    <!-- Commits cards rendered here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Screen Modal Overlay -->
     <div id="screen-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] hidden flex items-center justify-center p-4">
         <div class="relative w-full max-w-[90vw] h-[80vh] bg-[#111] border border-gray-700 rounded-2xl overflow-hidden shadow-2xl flex flex-col animate-in fade-in zoom-in duration-200">
             <div class="flex justify-between items-center px-4 py-3 border-b border-gray-800 bg-[#0A0A0A]">
@@ -167,6 +348,10 @@
         
         let allProjects = [];
         let isTaskActive = false;
+        let currentGitDiffs = [];
+        let currentGitCommits = [];
+        let selectedDiffIndex = 0;
+        let activeGitSubTab = 'changes';
         
         const folderSvgSmall = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-gray-600"><path d="M19.5 21a3 3 0 0 0 3-3V9a3 3 0 0 0-3-3h-5.379a.75.75 0 0 1-.53-.22L11.47 3.66A2.25 2.25 0 0 0 9.879 3H4.5a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h15Z" /><path fill-opacity="0.5" d="M1.5 10.5V18a3 3 0 0 0 3 3h15a3 3 0 0 0 3-3v-7.5H1.5Z" /></svg>`;
 
@@ -174,6 +359,7 @@
             try {
                 const res = await fetch('/api/projects_list');
                 allProjects = await res.json();
+                checkCurrentProjectGit();
             } catch(e) {
                 console.error("Failed to load projects", e);
             }
@@ -217,6 +403,7 @@
         searchInput.addEventListener('input', () => {
             pathInput.value = ''; 
             renderSearch();
+            checkCurrentProjectGit();
         });
 
         searchInput.addEventListener('focus', () => {
@@ -241,7 +428,441 @@
                 iconPreview.innerHTML = folderSvgSmall;
             }
             searchDropdown.classList.add('hidden');
+            checkCurrentProjectGit();
         };
+
+        // --- Git Status, Diff, Commits & Push Logic ---
+        const btnGitDiff = document.getElementById('btn-git-diff');
+        const gitBadge = document.getElementById('git-badge');
+        const gitDiffModal = document.getElementById('git-diff-modal');
+
+        async function checkCurrentProjectGit() {
+            const path = pathInput.value;
+            if (!path) {
+                btnGitDiff.classList.add('hidden');
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/git_status?path=${encodeURIComponent(path)}`);
+                if (!res.ok) {
+                    btnGitDiff.classList.add('hidden');
+                    return;
+                }
+                const data = await res.json();
+                if (data.is_git) {
+                    btnGitDiff.classList.remove('hidden');
+                    const changed = data.changed_count || 0;
+                    gitBadge.textContent = changed > 99 ? '99+' : changed;
+                    
+                    if (changed > 0) {
+                        gitBadge.className = 'absolute -bottom-1 -right-1 min-w-[20px] h-[20px] px-1 bg-blue-600 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center shadow-md border border-gray-900 leading-none animate-pulse';
+                    } else {
+                        gitBadge.className = 'absolute -bottom-1 -right-1 min-w-[20px] h-[20px] px-1 bg-gray-600 text-gray-200 text-[10px] font-extrabold rounded-full flex items-center justify-center shadow-md border border-gray-900 leading-none';
+                    }
+
+                    if (data.branch) {
+                        document.getElementById('git-branch-name').textContent = data.branch;
+                    }
+                } else {
+                    btnGitDiff.classList.add('hidden');
+                }
+            } catch(e) {
+                console.error("Git status fetch error:", e);
+                btnGitDiff.classList.add('hidden');
+            }
+        }
+
+        window.openGitDiffModal = function() {
+            gitDiffModal.classList.remove('hidden');
+            refreshGitAll();
+        };
+
+        window.closeGitDiffModal = function() {
+            gitDiffModal.classList.add('hidden');
+        };
+
+        gitDiffModal.addEventListener('click', (e) => {
+            if (e.target === gitDiffModal) closeGitDiffModal();
+        });
+
+        window.refreshGitAll = function() {
+            const icon = document.getElementById('git-refresh-icon');
+            if (icon) icon.classList.add('animate-spin');
+            
+            Promise.all([loadGitDiffDetails(), loadGitCommits()]).finally(() => {
+                setTimeout(() => {
+                    if (icon) icon.classList.remove('animate-spin');
+                }, 500);
+            });
+        };
+
+        window.switchGitSubTab = function(tab) {
+            activeGitSubTab = tab;
+            const tabChanges = document.getElementById('git-subtab-changes');
+            const tabHistory = document.getElementById('git-subtab-history');
+            const viewChanges = document.getElementById('git-view-changes');
+            const viewHistory = document.getElementById('git-view-history');
+
+            if (tab === 'changes') {
+                tabChanges.className = 'py-2.5 px-3 font-semibold border-b-2 border-blue-500 text-blue-400 flex items-center gap-2 transition-all';
+                tabHistory.className = 'py-2.5 px-3 font-semibold border-b-2 border-transparent text-gray-400 hover:text-gray-200 flex items-center gap-2 transition-all';
+                viewChanges.classList.remove('hidden');
+                viewHistory.classList.add('hidden');
+            } else {
+                tabHistory.className = 'py-2.5 px-3 font-semibold border-b-2 border-blue-500 text-blue-400 flex items-center gap-2 transition-all';
+                tabChanges.className = 'py-2.5 px-3 font-semibold border-b-2 border-transparent text-gray-400 hover:text-gray-200 flex items-center gap-2 transition-all';
+                viewHistory.classList.remove('hidden');
+                viewChanges.classList.add('hidden');
+                if (currentGitCommits.length === 0) {
+                    loadGitCommits();
+                }
+            }
+        };
+
+        async function loadGitDiffDetails() {
+            const path = pathInput.value;
+            const name = searchInput.value || 'Current Workspace';
+            if (!path) return;
+
+            document.getElementById('diff-modal-project-name').textContent = name;
+            document.getElementById('diff-modal-project-path').textContent = path;
+            document.getElementById('diff-content-area').innerHTML = `
+                <div class="h-full flex items-center justify-center text-gray-500 gap-2">
+                    <svg class="animate-spin h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    <span>Loading git diffs...</span>
+                </div>
+            `;
+
+            try {
+                const res = await fetch(`/api/git_diff?path=${encodeURIComponent(path)}`);
+                const data = await res.json();
+                if (data.status === 'success') {
+                    currentGitDiffs = data.diffs || [];
+                    const countLabel = `${currentGitDiffs.length} ${currentGitDiffs.length === 1 ? 'change' : 'changes'}`;
+                    document.getElementById('diff-modal-file-count-badge').textContent = countLabel;
+                    document.getElementById('subtab-changes-badge').textContent = currentGitDiffs.length;
+                    
+                    let totalAdds = 0;
+                    let totalDels = 0;
+                    currentGitDiffs.forEach(d => {
+                        totalAdds += d.additions || 0;
+                        totalDels += d.deletions || 0;
+                    });
+                    document.getElementById('diff-summary-additions').textContent = `+${totalAdds}`;
+                    document.getElementById('diff-summary-deletions').textContent = `-${totalDels}`;
+
+                    selectedDiffIndex = 0;
+                    renderDiffFileList();
+                    if (currentGitDiffs.length > 0) {
+                        selectDiffItem(0);
+                    } else {
+                        document.getElementById('selected-file-name').textContent = 'Clean working tree';
+                        document.getElementById('selected-file-stats').textContent = '';
+                        document.getElementById('diff-content-area').innerHTML = `
+                            <div class="h-full flex flex-col items-center justify-center text-gray-400 gap-3 p-6 text-center">
+                                <div class="w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                </div>
+                                <div>
+                                    <h4 class="font-semibold text-gray-200 text-sm">No uncommitted changes</h4>
+                                    <p class="text-xs text-gray-500 mt-1">Your working directory is clean and up to date.</p>
+                                </div>
+                            </div>
+                        `;
+                    }
+                } else {
+                    document.getElementById('diff-content-area').innerHTML = `<div class="text-red-400 p-4">Error: ${data.message}</div>`;
+                }
+            } catch(e) {
+                document.getElementById('diff-content-area').innerHTML = `<div class="text-red-400 p-4">Failed to fetch diff: ${e.message}</div>`;
+            }
+        }
+
+        async function loadGitCommits() {
+            const path = pathInput.value;
+            if (!path) return;
+
+            const listContainer = document.getElementById('commits-list-container');
+            const countLabel = document.getElementById('commit-count-label');
+            countLabel.textContent = 'Fetching commits...';
+
+            try {
+                const res = await fetch(`/api/git_commits?path=${encodeURIComponent(path)}&limit=35`);
+                const data = await res.json();
+
+                if (data.status === 'success') {
+                    currentGitCommits = data.commits || [];
+                    countLabel.textContent = `${currentGitCommits.length} recent commits`;
+                    document.getElementById('subtab-commits-badge').textContent = currentGitCommits.length;
+                    if (data.branch) {
+                        document.getElementById('git-branch-name').textContent = data.branch;
+                    }
+                    renderCommitsList();
+                } else {
+                    listContainer.innerHTML = `<div class="text-red-400 p-4 text-xs">Error loading commits: ${data.message}</div>`;
+                    countLabel.textContent = 'Error';
+                }
+            } catch(e) {
+                listContainer.innerHTML = `<div class="text-red-400 p-4 text-xs">Failed to load commits: ${e.message}</div>`;
+                countLabel.textContent = 'Error';
+            }
+        }
+
+        function renderCommitsList() {
+            const filter = (document.getElementById('commit-search-input').value || '').toLowerCase().trim();
+            const listContainer = document.getElementById('commits-list-container');
+
+            if (!currentGitCommits || currentGitCommits.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="h-64 flex flex-col items-center justify-center text-gray-500 text-xs gap-2">
+                        <svg class="w-8 h-8 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+                        <span>No commit history found</span>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '<div class="space-y-3">';
+            let renderedCount = 0;
+
+            currentGitCommits.forEach((commit) => {
+                const matchMsg = commit.message.toLowerCase().includes(filter);
+                const matchHash = commit.hash.toLowerCase().includes(filter) || commit.short_hash.toLowerCase().includes(filter);
+                const matchAuthor = commit.author.toLowerCase().includes(filter);
+
+                if (filter && !matchMsg && !matchHash && !matchAuthor) return;
+                renderedCount++;
+
+                const escapedMsg = commit.message.replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>');
+                const escapedAuthor = commit.author.replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>');
+
+                html += `
+                    <div class="p-3.5 bg-[#121212] hover:bg-[#181818] border border-gray-800/80 rounded-xl transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 group">
+                        <div class="flex items-start gap-3 min-w-0 flex-1">
+                            <div class="w-7 h-7 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
+                                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><line x1="1.05" y1="12" x2="7" y2="12"/><line x1="17.01" y1="12" x2="22.96" y2="12"/></svg>
+                            </div>
+                            <div class="flex flex-col min-w-0 flex-1">
+                                <div class="text-xs sm:text-sm font-semibold text-gray-100 break-words leading-snug">
+                                    ${escapedMsg}
+                                </div>
+                                <div class="flex items-center gap-2 text-[11px] text-gray-400 mt-1 flex-wrap font-sans">
+                                    <span class="text-gray-300 font-medium">${escapedAuthor}</span>
+                                    <span class="text-gray-600">•</span>
+                                    <span class="text-gray-500">${commit.relative_time}</span>
+                                    <span class="text-gray-600 hidden sm:inline">•</span>
+                                    <span class="text-gray-500 hidden sm:inline font-mono text-[10px]">${commit.date}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 self-end sm:self-center shrink-0">
+                            <button 
+                                onclick="copyCommitHash('${commit.hash}', this)" 
+                                class="px-2.5 py-1 bg-gray-800/80 hover:bg-gray-700 text-blue-400 hover:text-blue-300 font-mono text-[11px] font-bold rounded-lg border border-gray-700/80 flex items-center gap-1.5 transition-all shadow-inner"
+                                title="Copy full hash (${commit.hash})"
+                            >
+                                <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                                <span>${commit.short_hash}</span>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+
+            if (renderedCount === 0) {
+                listContainer.innerHTML = `<div class="p-8 text-center text-xs text-gray-500">No commits match filter "${filter}"</div>`;
+            } else {
+                listContainer.innerHTML = html;
+            }
+        }
+
+        window.copyCommitHash = function(hash, btn) {
+            navigator.clipboard.writeText(hash).then(() => {
+                const originalHtml = btn.innerHTML;
+                btn.innerHTML = `
+                    <svg class="w-3 h-3 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span class="text-emerald-400">Copied</span>
+                `;
+                setTimeout(() => {
+                    btn.innerHTML = originalHtml;
+                }, 1500);
+            }).catch(e => {
+                console.error("Failed to copy hash", e);
+            });
+        };
+
+        window.handleCommitAndPush = async function() {
+            const path = pathInput.value;
+            const msgInput = document.getElementById('git-commit-message-input');
+            const message = (msgInput.value || '').trim();
+            const doPush = document.getElementById('git-auto-push-checkbox').checked;
+            const btn = document.getElementById('btn-git-commit-push');
+            const feedback = document.getElementById('commit-feedback-msg');
+
+            if (!path) {
+                alert("No project selected.");
+                return;
+            }
+            if (!message) {
+                feedback.className = 'text-[11px] p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 block font-medium';
+                feedback.textContent = 'Please enter a commit message.';
+                msgInput.focus();
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = `
+                <svg class="animate-spin h-3.5 w-3.5 text-white" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                <span>Processing...</span>
+            `;
+
+            feedback.className = 'text-[11px] p-2 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-300 block';
+            feedback.textContent = doPush ? 'Staging, committing and pushing changes...' : 'Staging and committing changes...';
+
+            try {
+                const res = await fetch('/api/git_commit_push', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body: JSON.stringify({
+                        path: path,
+                        message: message,
+                        push: doPush
+                    })
+                });
+                const data = await res.json();
+
+                if (res.ok && data.status === 'success') {
+                    feedback.className = 'text-[11px] p-2.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 block font-medium';
+                    feedback.textContent = data.message || 'Committed and pushed successfully!';
+                    msgInput.value = '';
+                    
+                    // Refresh git state and commits list
+                    await Promise.all([loadGitDiffDetails(), loadGitCommits(), checkCurrentProjectGit()]);
+                    
+                    setTimeout(() => {
+                        feedback.className = 'hidden';
+                    }, 4000);
+                } else if (data.status === 'partial_success') {
+                    feedback.className = 'text-[11px] p-2.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 block';
+                    feedback.textContent = data.message;
+                    msgInput.value = '';
+                    await Promise.all([loadGitDiffDetails(), loadGitCommits(), checkCurrentProjectGit()]);
+                } else {
+                    feedback.className = 'text-[11px] p-2.5 rounded-lg bg-red-500/15 border border-red-500/30 text-red-300 block';
+                    feedback.textContent = data.message || 'Action failed.';
+                }
+            } catch(e) {
+                feedback.className = 'text-[11px] p-2.5 rounded-lg bg-red-500/15 border border-red-500/30 text-red-300 block';
+                feedback.textContent = `Error: ${e.message}`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                    <span>Commit & Push</span>
+                `;
+            }
+        };
+
+        function getStatusColorClass(status) {
+            const st = (status || '').toUpperCase().trim();
+            if (st.includes('M')) return { text: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/30', label: 'M' };
+            if (st.includes('A') || st.includes('??')) return { text: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/30', label: st.includes('??') ? 'U' : 'A' };
+            if (st.includes('D')) return { text: 'text-red-400', bg: 'bg-red-500/10 border-red-500/30', label: 'D' };
+            return { text: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/30', label: st || '•' };
+        }
+
+        function renderDiffFileList() {
+            const searchVal = (document.getElementById('diff-search-input').value || '').toLowerCase();
+            const listEl = document.getElementById('diff-file-list');
+            
+            if (currentGitDiffs.length === 0) {
+                listEl.innerHTML = `<div class="p-4 text-center text-xs text-gray-500 italic">No files changed</div>`;
+                return;
+            }
+
+            let html = '';
+            currentGitDiffs.forEach((item, idx) => {
+                const fileName = item.file || 'Unnamed';
+                if (searchVal && !fileName.toLowerCase().includes(searchVal)) return;
+
+                const statusStyle = getStatusColorClass(item.status);
+                const isSelected = idx === selectedDiffIndex;
+                const activeClass = isSelected ? 'bg-gray-800/90 border-l-2 border-blue-500' : 'hover:bg-gray-800/40 border-l-2 border-transparent';
+
+                const shortName = fileName.split('/').pop().split('\\').pop();
+                const dirPath = fileName.substring(0, fileName.length - shortName.length);
+
+                html += `
+                    <div onclick="selectDiffItem(${idx})" class="px-3 py-2 cursor-pointer transition-colors flex items-center justify-between gap-2 ${activeClass}">
+                        <div class="flex items-center gap-2 min-w-0 flex-1">
+                            <span class="w-4 h-4 rounded text-[10px] font-bold flex items-center justify-center border ${statusStyle.bg} ${statusStyle.text} shrink-0 font-mono">
+                                ${statusStyle.label}
+                            </span>
+                            <div class="flex flex-col min-w-0">
+                                <span class="text-xs font-mono font-medium text-gray-200 truncate">${shortName}</span>
+                                ${dirPath ? `<span class="text-[10px] text-gray-500 truncate font-mono">${dirPath}</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1 text-[10px] font-mono shrink-0">
+                            ${item.additions ? `<span class="text-emerald-400 font-medium">+${item.additions}</span>` : ''}
+                            ${item.deletions ? `<span class="text-red-400 font-medium">-${item.deletions}</span>` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+            listEl.innerHTML = html || `<div class="p-4 text-center text-xs text-gray-500 italic">No matches found</div>`;
+        }
+
+        window.selectDiffItem = function(index) {
+            selectedDiffIndex = index;
+            renderDiffFileList();
+            
+            const diffItem = currentGitDiffs[index];
+            if (!diffItem) return;
+
+            const statusStyle = getStatusColorClass(diffItem.status);
+            const badgeEl = document.getElementById('selected-file-status-badge');
+            badgeEl.textContent = statusStyle.label;
+            badgeEl.className = `px-1.5 py-0.5 rounded text-[10px] font-bold border ${statusStyle.bg} ${statusStyle.text} font-mono`;
+
+            document.getElementById('selected-file-name').textContent = diffItem.file;
+            document.getElementById('selected-file-stats').innerHTML = `
+                <span class="text-emerald-400 font-medium">+${diffItem.additions || 0}</span> 
+                <span class="text-red-400 font-medium">-${diffItem.deletions || 0}</span>
+            `;
+
+            // Format Diff Lines into HTML
+            const diffText = diffItem.diff || '';
+            const lines = diffText.split('\n');
+            let formattedHtml = '<div class="space-y-0.5 font-mono leading-relaxed">';
+
+            lines.forEach(line => {
+                let cls = 'text-gray-400';
+                let escaped = line.replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>');
+                
+                if (line.startsWith('+++') || line.startsWith('---')) {
+                    cls = 'diff-meta font-bold text-gray-300 py-0.5';
+                } else if (line.startsWith('+')) {
+                    cls = 'diff-added px-2 py-0.5';
+                } else if (line.startsWith('-')) {
+                    cls = 'diff-deleted px-2 py-0.5';
+                } else if (line.startsWith('@@')) {
+                    cls = 'diff-header px-2 py-1 my-1 font-semibold rounded';
+                } else if (line.startsWith('diff --git')) {
+                    cls = 'text-yellow-400 font-bold border-b border-gray-800 pb-1 mt-2 mb-1';
+                }
+
+                formattedHtml += `<div class="${cls} whitespace-pre-wrap break-all">${escaped || ' '}</div>`;
+            });
+            formattedHtml += '</div>';
+
+            document.getElementById('diff-content-area').innerHTML = formattedHtml;
+        };
+
+        setInterval(checkCurrentProjectGit, 5000);
 
         window.switchTab = function(tab) {
             const btnChat = document.getElementById('tab-chat');
@@ -290,7 +911,7 @@
             
             const meta = document.createElement('div');
             meta.className = `text-[10px] mb-1 ${isUser ? 'text-blue-200' : 'text-gray-500'}`;
-            meta.textContent = isUser ? 'You \u2022 ' + (msg.time || '') : (msg.role === 'system' ? 'System \u2022 ' : 'Assistant \u2022 ') + (msg.time || '');
+            meta.textContent = isUser ? 'You • ' + (msg.time || '') : (msg.role === 'system' ? 'System • ' : 'Assistant • ') + (msg.time || '');
             
             const content = document.createElement('div');
             content.className = 'text-sm whitespace-pre-wrap leading-relaxed';
@@ -394,6 +1015,7 @@
                     if (isTaskActive) {
                         switchTab('queue');
                     }
+                    checkCurrentProjectGit();
                 } else {
                     alert("Failed to add to queue.");
                 }

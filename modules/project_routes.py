@@ -11,9 +11,9 @@ from modules.project_manager import (load_project_links, save_project_links,
                                      filter_ignored_projects, get_all_projects_with_ignore_state)
 from modules.vscode_utils import find_vscode_executable, save_ignored_folder, load_ignored_folders, find_project_icon
 from modules.project_utils import (get_ui_projects_data, get_ui_active_windows, get_project_icon_info, 
-                                   detect_project_type, get_expo_tunnel_url, ensure_expo_tunnel_url,
-                                   is_expo_running, expo_process_logs, expo_process_status, start_expo_tunnel_process,
-                                   stop_expo_tunnel_process, expo_active_processes, get_active_expo_project)
+                                    detect_project_type, get_expo_tunnel_url, ensure_expo_tunnel_url,
+                                    is_expo_running, expo_process_logs, expo_process_status, start_expo_tunnel_process,
+                                    stop_expo_tunnel_process, expo_active_processes, get_active_expo_project)
 from modules.window_manager import focus_and_maximize_window, wait_for_vscode_window
 
 logger = logging.getLogger(__name__)
@@ -30,6 +30,22 @@ def resolve_project_dev_link(p_path, project_type, saved_links):
                 return expo_url
         return ""
     return saved_links.get(norm_path, "")
+
+def run_git_cmd(project_path, args):
+    try:
+        flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        res = subprocess.run(
+            ['git'] + args,
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            creationflags=flags
+        )
+        return res.returncode == 0, res.stdout, res.stderr
+    except Exception as e:
+        return False, "", str(e)
 
 @project_bp.route('/dashboard')
 def dashboard():
@@ -275,6 +291,239 @@ def update_project_link():
         return jsonify({'status': 'success', 'message': 'Project link updated'})
     except Exception as e:
         logger.error(f"Error updating project link: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@project_bp.route('/api/git_status')
+def api_git_status():
+    project_path = request.args.get('path')
+    if not project_path or not os.path.isdir(project_path):
+        return jsonify({'status': 'error', 'is_git': False, 'changed_count': 0, 'files': []})
+    
+    is_git, _, _ = run_git_cmd(project_path, ['rev-parse', '--is-inside-work-tree'])
+    if not is_git:
+        return jsonify({'status': 'success', 'is_git': False, 'changed_count': 0, 'files': []})
+    
+    _, status_out, _ = run_git_cmd(project_path, ['status', '--short'])
+    lines = [line.rstrip() for line in status_out.splitlines() if line.strip()]
+    
+    file_list = []
+    for line in lines:
+        if len(line) >= 3:
+            st = line[:2].strip()
+            fname = line[3:].strip()
+            if ' -> ' in fname:
+                fname = fname.split(' -> ')[-1]
+            file_list.append({'status': st, 'file': fname})
+            
+    # Also get current branch name
+    _, branch_out, _ = run_git_cmd(project_path, ['branch', '--show-current'])
+    branch_name = branch_out.strip() or 'HEAD'
+
+    return jsonify({
+        'status': 'success',
+        'is_git': True,
+        'branch': branch_name,
+        'changed_count': len(file_list),
+        'files': file_list
+    })
+
+@project_bp.route('/api/git_diff')
+def api_git_diff():
+    project_path = request.args.get('path')
+    if not project_path or not os.path.isdir(project_path):
+        return jsonify({'status': 'error', 'message': 'Invalid project path', 'diffs': []})
+    
+    is_git, _, _ = run_git_cmd(project_path, ['rev-parse', '--is-inside-work-tree'])
+    if not is_git:
+        return jsonify({'status': 'error', 'message': 'Not a git repository', 'diffs': []})
+    
+    # Check modified files list
+    _, status_out, _ = run_git_cmd(project_path, ['status', '--short'])
+    status_lines = [l.rstrip() for l in status_out.splitlines() if l.strip()]
+    
+    files_map = {}
+    for l in status_lines:
+        if len(l) >= 3:
+            st = l[:2].strip()
+            fname = l[3:].strip()
+            if ' -> ' in fname:
+                fname = fname.split(' -> ')[-1]
+            files_map[fname] = st
+            
+    # Try diff HEAD, fallback to plain diff
+    _, diff_out, _ = run_git_cmd(project_path, ['diff', 'HEAD'])
+    if not diff_out.strip():
+        _, diff_out, _ = run_git_cmd(project_path, ['diff'])
+        
+    # Split per file diff
+    diff_sections = []
+    raw_sections = diff_out.split('diff --git ')
+    
+    for section in raw_sections:
+        if not section.strip():
+            continue
+        full_section = 'diff --git ' + section
+        header_line = section.splitlines()[0] if section.splitlines() else ''
+        file_name = ''
+        if ' b/' in header_line:
+            file_name = header_line.split(' b/')[-1].strip()
+        elif ' a/' in header_line:
+            file_name = header_line.split(' a/')[-1].strip()
+            
+        additions = 0
+        deletions = 0
+        for line in full_section.splitlines():
+            if line.startswith('+') and not line.startswith('+++'):
+                additions += 1
+            elif line.startswith('-') and not line.startswith('---'):
+                deletions += 1
+                
+        diff_sections.append({
+            'file': file_name,
+            'status': files_map.get(file_name, 'M'),
+            'additions': additions,
+            'deletions': deletions,
+            'diff': full_section
+        })
+        
+    # Also include untracked / other files that have no git diff output
+    diffed_files = {d['file'] for d in diff_sections}
+    for fname, st in files_map.items():
+        if fname not in diffed_files:
+            file_full_path = os.path.join(project_path, fname)
+            untracked_content = ""
+            additions = 0
+            if os.path.isfile(file_full_path):
+                try:
+                    with open(file_full_path, 'r', encoding='utf-8', errors='replace') as uf:
+                        untracked_lines = uf.readlines()
+                        additions = len(untracked_lines)
+                        untracked_content = "".join(["+" + line for line in untracked_lines[:500]])
+                except:
+                    untracked_content = "[Binary or unreadable file]"
+            diff_sections.append({
+                'file': fname,
+                'status': st,
+                'additions': additions,
+                'deletions': 0,
+                'diff': f"--- /dev/null\n+++ b/{fname}\n@@ -0,0 +1,{additions} @@\n" + untracked_content
+            })
+            
+    return jsonify({
+        'status': 'success',
+        'is_git': True,
+        'diffs': diff_sections,
+        'total_changed': len(files_map)
+    })
+
+@project_bp.route('/api/git_commits')
+def api_git_commits():
+    project_path = request.args.get('path')
+    limit = request.args.get('limit', '30')
+    try:
+        limit_val = int(limit)
+    except:
+        limit_val = 30
+
+    if not project_path or not os.path.isdir(project_path):
+        return jsonify({'status': 'error', 'message': 'Invalid project path', 'commits': []})
+
+    is_git, _, _ = run_git_cmd(project_path, ['rev-parse', '--is-inside-work-tree'])
+    if not is_git:
+        return jsonify({'status': 'error', 'message': 'Not a git repository', 'commits': []})
+
+    # Format: full_hash | short_hash | author_name | author_email | relative_date | iso_date | subject
+    delimiter = "~~~GIT_COMMIT_SEP~~~"
+    log_format = f"%H{delimiter}%h{delimiter}%an{delimiter}%ae{delimiter}%cr{delimiter}%cd{delimiter}%s"
+    
+    success, log_out, err = run_git_cmd(
+        project_path, 
+        ['log', f'-n{limit_val}', f'--pretty=format:{log_format}', '--date=short']
+    )
+    
+    commits = []
+    if success and log_out.strip():
+        for line in log_out.strip().splitlines():
+            parts = line.split(delimiter)
+            if len(parts) >= 7:
+                commits.append({
+                    'hash': parts[0],
+                    'short_hash': parts[1],
+                    'author': parts[2],
+                    'email': parts[3],
+                    'relative_time': parts[4],
+                    'date': parts[5],
+                    'message': parts[6]
+                })
+
+    _, branch_out, _ = run_git_cmd(project_path, ['branch', '--show-current'])
+    branch_name = branch_out.strip() or 'HEAD'
+
+    return jsonify({
+        'status': 'success',
+        'is_git': True,
+        'branch': branch_name,
+        'commits': commits
+    })
+
+@project_bp.route('/api/git_commit_push', methods=['POST'])
+def api_git_commit_push():
+    try:
+        data = request.get_json() or {}
+        project_path = data.get('path')
+        commit_message = (data.get('message') or '').strip()
+        do_push = data.get('push', True)
+
+        if not project_path or not os.path.isdir(project_path):
+            return jsonify({'status': 'error', 'message': 'Invalid project path'}), 400
+
+        if not commit_message:
+            return jsonify({'status': 'error', 'message': 'Commit message is required'}), 400
+
+        is_git, _, _ = run_git_cmd(project_path, ['rev-parse', '--is-inside-work-tree'])
+        if not is_git:
+            return jsonify({'status': 'error', 'message': 'Not a git repository'}), 400
+
+        # 1. Stage all changes
+        ok_add, _, err_add = run_git_cmd(project_path, ['add', '-A'])
+        if not ok_add:
+            return jsonify({'status': 'error', 'message': f'Failed to stage changes: {err_add}'}), 500
+
+        # Check if anything is staged to commit
+        _, status_out, _ = run_git_cmd(project_path, ['status', '--porcelain'])
+        if not status_out.strip():
+            return jsonify({'status': 'error', 'message': 'No changes detected to commit.'}), 400
+
+        # 2. Commit
+        ok_commit, commit_out, err_commit = run_git_cmd(project_path, ['commit', '-m', commit_message])
+        if not ok_commit:
+            return jsonify({'status': 'error', 'message': f'Commit failed: {err_commit or commit_out}'}), 500
+
+        push_output = ""
+        pushed = False
+        # 3. Push if requested
+        if do_push:
+            ok_push, push_out, err_push = run_git_cmd(project_path, ['push'])
+            if not ok_push:
+                return jsonify({
+                    'status': 'partial_success',
+                    'message': f'Committed successfully, but push failed: {err_push or push_out}',
+                    'committed': True,
+                    'pushed': False
+                })
+            push_output = push_out or err_push
+            pushed = True
+
+        return jsonify({
+            'status': 'success',
+            'message': 'Changes successfully committed and pushed!' if pushed else 'Changes successfully committed!',
+            'committed': True,
+            'pushed': pushed,
+            'output': push_output
+        })
+
+    except Exception as e:
+        logger.error(f"Error during git commit/push: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @project_bp.route('/api/expo_active_tunnel')
