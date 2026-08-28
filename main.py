@@ -17,6 +17,10 @@ import colorama
 import subprocess
 from datetime import timedelta, date
 import threading
+import socket
+import atexit
+import signal
+import ctypes
 
 from optimisewait import set_autopath, set_altpath
 from talktollm import talkto
@@ -55,6 +59,135 @@ terminal_log_level = config.get('terminal_log_level', 'default')
 terminal_alert_level = config.get('terminal_alert_level', 'none')
 tunnel_active = str(config.get('tunnel_active', 'False')).lower() == 'true'
 auth_required = str(config.get('auth_required', 'False')).lower() == 'true'
+
+# --- ROBUST SINGLE INSTANCE & PORT 3001 ENFORCEMENT ---
+LOCK_FILE_PATH = os.path.join(APP_PATH, '.cline_x.lock')
+_named_mutex_handle = None
+
+def is_pid_alive(pid: int) -> bool:
+    if pid <= 0 or pid == os.getpid():
+        return False
+    if os.name == 'nt':
+        try:
+            cmd = f'tasklist /FI "PID eq {pid}" /FO CSV /NH'
+            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode('utf-8', errors='ignore')
+            return f'"{pid}"' in output or str(pid) in output
+        except Exception:
+            return False
+    else:
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
+
+def terminate_pid_tree(pid: int):
+    if pid <= 0 or pid == os.getpid():
+        return
+    try:
+        if os.name == 'nt':
+            subprocess.run(f'taskkill /F /T /PID {pid}', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            os.kill(pid, signal.SIGKILL)
+    except Exception:
+        pass
+
+def get_listening_pids_on_port(port: int) -> List[int]:
+    pids = []
+    if os.name == 'nt':
+        try:
+            output = subprocess.check_output('netstat -ano -p tcp', shell=True, stderr=subprocess.DEVNULL).decode('utf-8', errors='ignore')
+            for line in output.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                # Match TCP lines listening on :port
+                # Example: TCP    0.0.0.0:3001    0.0.0.0:0    LISTENING    12345
+                match = re.search(rf':{port}\s+.*(?:LISTENING|ESTABLISHED)\s+(\d+)', line, re.IGNORECASE)
+                if match:
+                    found_pid = int(match.group(1))
+                    if found_pid > 0 and found_pid != os.getpid() and found_pid not in pids:
+                        pids.append(found_pid)
+        except Exception:
+            pass
+    return pids
+
+def is_port_listening(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.3)
+        return s.connect_ex(('127.0.0.1', port)) == 0
+
+def wait_for_port_freed(port: int, max_wait_sec: float = 4.0) -> bool:
+    start = time.time()
+    while time.time() - start < max_wait_sec:
+        if not is_port_listening(port):
+            return True
+        time.sleep(0.2)
+    return not is_port_listening(port)
+
+def cleanup_lock_and_mutex():
+    global _named_mutex_handle
+    try:
+        if os.path.exists(LOCK_FILE_PATH):
+            with open(LOCK_FILE_PATH, 'r') as f:
+                content = f.read().strip()
+            if content == str(os.getpid()):
+                os.remove(LOCK_FILE_PATH)
+    except Exception:
+        pass
+
+    if _named_mutex_handle and os.name == 'nt':
+        try:
+            ctypes.windll.kernel32.CloseHandle(_named_mutex_handle)
+            _named_mutex_handle = None
+        except Exception:
+            pass
+
+def enforce_single_instance(port: int = 3001):
+    global _named_mutex_handle
+
+    # 1. Kill any existing instance recorded in lock file
+    if os.path.exists(LOCK_FILE_PATH):
+        try:
+            with open(LOCK_FILE_PATH, 'r') as f:
+                old_pid_str = f.read().strip()
+            if old_pid_str.isdigit():
+                old_pid = int(old_pid_str)
+                if old_pid != os.getpid() and is_pid_alive(old_pid):
+                    print(f"{colorama.Fore.YELLOW}[Single-Instance] Terminating previous background instance (PID: {old_pid})...{colorama.Style.RESET_ALL}")
+                    terminate_pid_tree(old_pid)
+                    time.sleep(0.5)
+        except Exception:
+            pass
+
+    # 2. Check and terminate any process listening on port 3001
+    occupying_pids = get_listening_pids_on_port(port)
+    for p in occupying_pids:
+        print(f"{colorama.Fore.YELLOW}[Single-Instance] Port {port} is occupied by PID {p}. Freeing port...{colorama.Style.RESET_ALL}")
+        terminate_pid_tree(p)
+
+    # 3. Wait for port 3001 to be completely released by OS
+    if not wait_for_port_freed(port, max_wait_sec=3.0):
+        # Retry scan one more time if still occupied
+        for p in get_listening_pids_on_port(port):
+            terminate_pid_tree(p)
+        wait_for_port_freed(port, max_wait_sec=2.0)
+
+    # 4. Acquire Windows Named Mutex
+    if os.name == 'nt':
+        try:
+            mutex_name = "Local\\ClineX_FlaskServer_SingleInstance_3001"
+            _named_mutex_handle = ctypes.windll.kernel32.CreateMutexW(None, False, mutex_name)
+        except Exception:
+            pass
+
+    # 5. Write current PID to lockfile & register exit cleanup
+    try:
+        with open(LOCK_FILE_PATH, 'w') as f:
+            f.write(str(os.getpid()))
+        atexit.register(cleanup_lock_and_mutex)
+    except Exception:
+        pass
 
 # --- LOGGING SETUP ---
 class CustomFormatter(logging.Formatter):
@@ -676,6 +809,9 @@ ngrok_tunnel = None
 
 if __name__ == '__main__':
     colorama.init(autoreset=True)
+
+    # Enforce single instance & clear any previous background instance on port 3001
+    enforce_single_instance(port=3001)
 
     if tunnel_active:
         ngrok_authtoken = os.getenv("NGROK_AUTHTOKEN")

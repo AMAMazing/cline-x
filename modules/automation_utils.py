@@ -4,6 +4,7 @@ from optimisewait import optimiseWait
 from modules.clipboard_utils import set_clipboard
 
 def process_optimisewait_message(message, debug: bool = False):
+    optimiseWait('cline', autopath='linkimages')
     optimiseWait('newchat', autopath='linkimages')
     optimiseWait('taskhere', autopath='linkimages')
     
