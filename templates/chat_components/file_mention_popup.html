@@ -1,0 +1,13 @@
+<!-- Dynamic Floating @ File Autocomplete Menu -->
+<div id="file-mention-popup" class="hidden absolute left-3 right-3 sm:left-6 sm:right-6 bottom-24 bg-[#141418] border border-gray-700/80 rounded-2xl shadow-2xl overflow-hidden z-50 flex flex-col max-h-72 glass-panel animate-in fade-in slide-in-from-bottom-2 duration-150">
+    <div class="px-3.5 py-2 border-b border-gray-800 bg-[#0d0d10] flex items-center justify-between text-xs text-gray-400">
+        <div class="flex items-center gap-1.5">
+            <span class="font-bold text-blue-400">@</span>
+            <span class="font-semibold text-gray-200">Mention Project File</span>
+        </div>
+        <span id="file-mention-hint" class="text-[11px] text-gray-500">Tap to insert path</span>
+    </div>
+    <div id="file-mention-list" class="overflow-y-auto divide-y divide-gray-800/40 p-1">
+        <!-- File candidate items injected here -->
+    </div>
+</div>

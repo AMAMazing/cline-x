@@ -8,13 +8,13 @@ from modules.config_utils import APP_PATH
 logger = logging.getLogger(__name__)
 
 CHAT_STORAGE_PATH = os.path.join(APP_PATH, 'chat_history.json')
-MAX_MESSAGES_PER_SESSION = 100
-MAX_SESSIONS_PER_PROJECT = 30
+MAX_MESSAGES_PER_SESSION = 200
+MAX_SESSIONS_PER_PROJECT = 50
 
-# In-memory fast cache and legacy global list
-chat_history: List[Dict] = []
+# Fast in-memory state tracking
 current_active_project = "default"
 current_active_session_id = "default"
+chat_history: List[Dict] = []
 
 def _load_storage() -> Dict:
     if os.path.exists(CHAT_STORAGE_PATH):
@@ -62,12 +62,27 @@ def get_project_sessions(project_name: str) -> List[Dict]:
     proj_data = storage.get(project_name or "default", {"sessions": {}})
     sessions_dict = proj_data.get("sessions", {})
     
+    if not sessions_dict:
+        # Create initial session for this project
+        initial_sid = "default"
+        sessions_dict[initial_sid] = {
+            "id": initial_sid,
+            "title": "Initial Session",
+            "created_at": time.strftime('%Y-%m-%d %H:%M:%S'),
+            "updated_at": time.strftime('%Y-%m-%d %H:%M:%S'),
+            "messages": []
+        }
+        proj_data["sessions"] = sessions_dict
+        proj_data["active_session"] = initial_sid
+        storage[project_name or "default"] = proj_data
+        _save_storage(storage)
+    
     sessions_list = []
     for sid, sinfo in sessions_dict.items():
         messages = sinfo.get("messages", [])
         last_msg = messages[-1]["text"] if messages else ""
         first_user_msg = next((m["text"] for m in messages if m.get("role") == "user"), "")
-        title = sinfo.get("title") or (first_user_msg[:40] + ("..." if len(first_user_msg) > 40 else "")) or "New Conversation"
+        title = sinfo.get("title") or (first_user_msg[:40] + ("..." if len(first_user_msg) > 40 else "")) or "Conversation"
         
         sessions_list.append({
             "id": sid,
@@ -90,7 +105,6 @@ def create_project_session(project_name: str, title: Optional[str] = None) -> st
     storage = _load_storage()
     proj_data = storage.setdefault(current_active_project, {"sessions": {}, "active_session": session_id})
     
-    # Trim old sessions if exceeding limit
     if len(proj_data["sessions"]) >= MAX_SESSIONS_PER_PROJECT:
         sorted_keys = sorted(proj_data["sessions"].keys(), key=lambda k: proj_data["sessions"][k].get("updated_at", ""))
         for k in sorted_keys[:len(proj_data["sessions"]) - MAX_SESSIONS_PER_PROJECT + 1]:
@@ -144,7 +158,6 @@ def get_project_messages(project_name: str, session_id: Optional[str] = None) ->
     return []
 
 def get_ongoing_context_prompt(project_name: str, limit_messages: int = 6) -> str:
-    """Extracts summary and key previous prompts/replies to maintain seamless ongoing context."""
     messages = get_project_messages(project_name)
     if not messages:
         return ""
@@ -169,9 +182,13 @@ def add_chat_message(role, text, full_text=None, project_name=None, session_id=N
     global chat_history, current_active_project, current_active_session_id
     
     target_proj = project_name or current_active_project or "default"
-    target_sess = session_id or current_active_session_id or "default"
+    
+    storage = _load_storage()
+    proj_data = storage.setdefault(target_proj, {"sessions": {}, "active_session": "default"})
+    target_sess = session_id or proj_data.get("active_session") or "default"
     
     message = {
+        'id': f"msg_{int(time.time() * 1000)}",
         'role': role,
         'text': text,
         'time': time.strftime('%H:%M'),
@@ -180,13 +197,7 @@ def add_chat_message(role, text, full_text=None, project_name=None, session_id=N
     if full_text:
         message['full_text'] = full_text
 
-    chat_history.append(message)
-    if len(chat_history) > MAX_MESSAGES_PER_SESSION:
-        chat_history.pop(0)
-
     try:
-        storage = _load_storage()
-        proj_data = storage.setdefault(target_proj, {"sessions": {}, "active_session": target_sess})
         sess_data = proj_data["sessions"].setdefault(target_sess, {
             "id": target_sess,
             "title": text[:40] if role == 'user' else "Conversation",
@@ -195,7 +206,6 @@ def add_chat_message(role, text, full_text=None, project_name=None, session_id=N
             "messages": []
         })
         
-        # Set intelligent title on first user message if default
         if role == 'user' and (sess_data.get("title") in ["New Session", "Initial Session", "Conversation", ""] or not sess_data.get("title")):
             clean_t = text.replace('\n', ' ').strip()
             sess_data["title"] = clean_t[:45] + ("..." if len(clean_t) > 45 else "")
@@ -209,5 +219,8 @@ def add_chat_message(role, text, full_text=None, project_name=None, session_id=N
             
         proj_data["active_session"] = target_sess
         _save_storage(storage)
+        
+        if target_proj == current_active_project and target_sess == current_active_session_id:
+            chat_history = sess_messages
     except Exception as e:
         logger.error(f"Error persisting chat message: {e}")
