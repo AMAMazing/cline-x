@@ -21,10 +21,9 @@ import socket
 import atexit
 import signal
 import ctypes
-
-from optimisewait import set_autopath, set_altpath
-from talktollm import talkto
 from typing import Union, List, Dict
+
+from talktollm import talkto
 
 # --- Import Local Modules ---
 from modules.config_utils import get_app_path, read_config, write_config, get_rules_content, APP_PATH, DOTENV_PATH
@@ -40,6 +39,13 @@ import modules.queue_manager as queue_manager
 from modules.auth_utils import require_api_key, API_KEY
 from modules.project_routes import project_bp
 from modules.pomodoro_routes import pomodoro_bp
+from modules.cline_cli_utils import (
+    find_cline_executable,
+    terminate_active_cline,
+    get_cli_logs,
+    clear_cli_logs,
+    is_cline_available
+)
 
 # Fix for Windows Unicode Output
 if sys.platform.startswith('win'):
@@ -210,9 +216,9 @@ logger.setLevel(logging.DEBUG if terminal_log_level == 'debug' else logging.INFO
 alert_state = {'lines_printed': 0, 'active': False}
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24) 
-app.permanent_session_lifetime = timedelta(days=30) 
-csrf = CSRFProtect(app) 
+app.secret_key = os.urandom(24)
+app.permanent_session_lifetime = timedelta(days=30)
+csrf = CSRFProtect(app)
 
 limiter = Limiter(
     get_remote_address,
@@ -231,13 +237,10 @@ csrf.exempt(pomodoro_bp)
 last_request_time = 0
 MIN_REQUEST_INTERVAL = 5
 
-set_autopath(r"D:\cline-x-claudeweb\images")
-set_altpath(r"D:\cline-x-claudeweb\images\alt1440")
-
 def handle_llm_interaction(prompt):
     global last_request_time
     clear_previous_alert(alert_state)
-    
+
     logger.info(f"Starting {current_model} interaction.")
 
     current_time = time.time()
@@ -248,7 +251,7 @@ def handle_llm_interaction(prompt):
 
     request_json = request.get_json()
     image_list = []
-    
+
     if 'messages' in request_json:
         for message in request_json['messages']:
             content = message.get('content', [])
@@ -271,7 +274,7 @@ def handle_llm_interaction(prompt):
 
     prompt_instructions.append(prompt)
     prompt_instructions.append(unified_rules)
-    
+
     fullpromptbefore = "\n".join(prompt_instructions)
     full_prompt = re.sub(r'data:image\/png;base64,[A-Za-z0-9+\/=]+', '', fullpromptbefore)
 
@@ -283,7 +286,6 @@ def handle_llm_interaction(prompt):
 def home():
     logger.debug(f"GET request to / from {request.remote_addr}")
     public_url = ngrok_tunnel.public_url if 'ngrok_tunnel' in globals() and ngrok_tunnel else 'Starting...'
-    
     return render_template('control_panel.html',
                            current_model=current_model,
                            terminal_log_level=terminal_log_level,
@@ -302,7 +304,6 @@ def model_route():
     global current_model, config
     if request.method == 'GET':
         return jsonify({'model': current_model})
-    
     if request.method == 'POST':
         try:
             clear_previous_alert(alert_state)
@@ -328,7 +329,6 @@ def notification_settings():
         data = request.get_json()
         if data is None or 'level' not in data:
             return jsonify({'success': False, 'error': 'Invalid request'}), 400
-        
         new_level = data['level'].lower()
         if new_level not in ['none', 'completion', 'all']:
             return jsonify({'success': False, 'error': 'Invalid level'}), 400
@@ -349,7 +349,6 @@ def enable_ntfy():
     try:
         random_code = secrets.token_urlsafe(10)
         topic = f"clinex-{random_code}"
-        
         config['ntfy_topic'] = topic
         write_config(config)
         logger.info(f"Generated ntfy topic: {topic}")
@@ -366,7 +365,6 @@ def set_log_level():
         data = request.get_json()
         if data is None or 'level' not in data:
             return jsonify({'success': False, 'error': 'Invalid request'}), 400
-        
         new_level = data['level'].lower()
         if new_level not in ['none', 'minimal', 'default', 'debug']:
             return jsonify({'success': False, 'error': 'Invalid level'}), 400
@@ -394,7 +392,6 @@ def set_alert_level():
         data = request.get_json()
         if data is None or 'level' not in data:
             return jsonify({'success': False, 'error': 'Invalid request'}), 400
-        
         new_level = data['level'].lower()
         if new_level not in ['none', 'completions', 'all']:
             return jsonify({'success': False, 'error': 'Invalid level'}), 400
@@ -416,7 +413,6 @@ def toggle_tunnel():
         data = request.get_json()
         if data is None or 'enabled' not in data:
             return jsonify({'success': False, 'error': 'Invalid request'}), 400
-
         new_state = data['enabled']
         
         if new_state and not tunnel_active:
@@ -486,7 +482,6 @@ def toggle_auth():
         data = request.get_json()
         if data is None or 'enabled' not in data:
             return jsonify({'success': False, 'error': 'Invalid request'}), 400
-
         new_state = data['enabled']
         auth_required = new_state
         config['auth_required'] = str(auth_required)
@@ -518,7 +513,6 @@ def theme_settings():
         data = request.get_json()
         if data is None or 'theme' not in data:
             return jsonify({'success': False, 'error': 'Invalid request'}), 400
-        
         new_theme = data['theme'].lower()
         if new_theme not in ['light', 'dark'] or not new_theme:
             return jsonify({'success': False, 'error': 'Invalid theme'}), 400
@@ -538,7 +532,6 @@ def open_rules_file():
     try:
         data = request.json
         path = data.get('path')
-        
         if not path or not os.path.exists(path):
             return jsonify({'success': False, 'error': 'Path does not exist'}), 404
         
@@ -556,7 +549,6 @@ def chat_completions():
     queue_manager.state['system_busy'] = True
     try:
         clear_previous_alert(alert_state)
-        
         data = request.get_json()
         if not data or 'messages' not in data:
             return jsonify({'error': {'message': 'Invalid request format'}}), 400
@@ -674,28 +666,93 @@ def batch_status():
     return jsonify({
         'completed': queue_manager.state['global_completion_status'],
         'last_reply': queue_manager.state['global_last_reply'],
-        'system_busy': queue_manager.state['system_busy']
+        'system_busy': queue_manager.state['system_busy'],
+        'last_stdout_chunk': queue_manager.state.get('last_stdout_chunk', '')
+    })
+
+# --- Live Cline CLI Logs & Control Endpoints ---
+@app.route('/api/cli_logs', methods=['GET'])
+@limiter.exempt
+def cli_logs_route():
+    try:
+        since = int(request.args.get('since', 0))
+        data = get_cli_logs(since_index=since)
+        data['is_installed'] = is_cline_available()
+        data['executable'] = find_cline_executable()
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/cli_terminate', methods=['POST'])
+@limiter.exempt
+@csrf.exempt
+def cli_terminate_route():
+    try:
+        terminate_active_cline()
+        queue_manager.state['system_busy'] = False
+        queue_manager.state['global_last_reply'] = "Process terminated."
+        return jsonify({'status': 'success', 'message': 'Cline CLI process terminated.'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/cli_clear_logs', methods=['POST'])
+@limiter.exempt
+@csrf.exempt
+def cli_clear_logs_route():
+    clear_cli_logs()
+    return jsonify({'status': 'success'})
+
+@app.route('/api/cli_status', methods=['GET'])
+@limiter.exempt
+def cli_status_route():
+    return jsonify({
+        'is_installed': is_cline_available(),
+        'executable': find_cline_executable(),
+        'active_pid': queue_manager.state.get('active_pid')
     })
 
 @app.route('/send_message', methods=['POST'])
 @limiter.limit("20 per minute")
 def send_message():
-    data = request.json
+    data = request.json or {}
     message = data.get('message')
     project_name = data.get('project_name') or current_active_project
-    
+    project_path = data.get('project_path')
+    yolo_mode = bool(data.get('yolo', True))
+    visible_terminal = bool(data.get('visible_terminal', False))
+
     if not message:
         return jsonify({'status': 'error', 'message': 'Message cannot be empty'}), 400
 
     try:
         queue_manager.state['system_busy'] = True
         queue_manager.state['global_completion_status'] = False
-        queue_manager.state['global_last_reply'] = ""
+        queue_manager.state['global_last_reply'] = "Dispatching to Cline CLI..."
         add_chat_message('user', message, project_name=project_name)
-        process_optimisewait_message(message, debug=(terminal_log_level == 'debug'))
-        return jsonify({'status': 'success', 'message': 'Message processed'})
+        
+        def _stream_out(line):
+            queue_manager._handle_cline_stdout_line(line, project_name)
+            
+        def _stream_err(line):
+            queue_manager._handle_cline_stderr_line(line)
+            
+        def _on_done(code, out, err):
+            queue_manager._on_cline_task_complete(code, out, err, terminal_log_level)
+
+        process_optimisewait_message(
+            message=message,
+            project_path=project_path,
+            yolo=yolo_mode,
+            visible_terminal=visible_terminal,
+            debug=(terminal_log_level == 'debug'),
+            on_stdout=_stream_out,
+            on_stderr=_stream_err,
+            on_complete=_on_done
+        )
+        return jsonify({'status': 'success', 'message': 'Message dispatched to Cline CLI'})
     except Exception as e:
         logger.error(f"Message processing failed: {e}")
+        queue_manager.state['system_busy'] = False
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/get_messages')
@@ -713,7 +770,7 @@ def get_messages():
 def restart_server():
     try:
         logger.info("Restart command received. Spawning new window and exiting...")
-        
+        terminate_active_cline()
         def perform_restart():
             time.sleep(0.5)
             script_path = os.path.abspath(sys.argv[0])
@@ -762,15 +819,16 @@ def api_queue():
     if request.method == 'GET':
         return jsonify({'queue': queue_manager.task_queue, 'current': queue_manager.state['current_queue_task'], 'system_busy': queue_manager.state['system_busy']})
     elif request.method == 'POST':
-        data = request.json
+        data = request.json or {}
         proj_name = data.get('project_name') or current_active_project
         msg_text = data.get('message')
-        
         task = {
             'id': secrets.token_hex(8),
             'project_path': data.get('project_path'),
             'project_name': proj_name,
-            'message': msg_text
+            'message': msg_text,
+            'yolo': bool(data.get('yolo', True)),
+            'visible_terminal': bool(data.get('visible_terminal', False))
         }
         
         if msg_text:
@@ -803,7 +861,6 @@ ngrok_tunnel = None
 
 if __name__ == '__main__':
     colorama.init(autoreset=True)
-
     enforce_single_instance(port=3001)
 
     if tunnel_active:
@@ -843,7 +900,7 @@ if __name__ == '__main__':
         API_KEY=API_KEY,
         APP_PATH=APP_PATH
     )
-    
+
     try:
         app.run(host="0.0.0.0", port=3001)
     except Exception as e:
