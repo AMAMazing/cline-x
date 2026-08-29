@@ -28,7 +28,7 @@
                     }
                 }
             }
-        }
+        };
     </script>
     <style>
         /* Custom Scrollbar */
@@ -372,7 +372,7 @@
     </div>
 
     <script>
-        const csrfToken = document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content');
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
         const messageInput = document.getElementById('message-input');
         const pathInput = document.getElementById('project-path-input');
         const searchInput = document.getElementById('project-search-input');
@@ -518,7 +518,7 @@
         window.clearTerminalLogs = async function() {
             try {
                 await fetch('/api/cli_clear_logs', { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
-                document.getElementById('terminal-logs-body').innerHTML = '<div class=\"text-gray-500 italic\">Logs cleared.</div>';
+                document.getElementById('terminal-logs-body').innerHTML = '<div class="text-gray-500 italic">Logs cleared.</div>';
                 logPollIndex = 0;
             } catch (e) {
                 console.error("Clear error", e);
@@ -588,7 +588,7 @@
                         'Content-Type': 'application/json',
                         'X-CSRFToken': csrfToken
                     },
-                    body: JSON.stringify({ model: modelName })\r
+                    body: JSON.stringify({ model: modelName })
                 });
                 const data = await res.json();
                 if (data.success) {

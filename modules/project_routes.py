@@ -143,7 +143,7 @@ def cline_quest():
                            unpinned_inactive_projects=unpinned_inactive_projects,
                            all_projects=all_projects)
 
-@project_bp.route('/api/toggle_pin', methods=['POST'] if True else [])
+@project_bp.route('/api/toggle_pin', methods=['POST'])
 def toggle_pin():
     project_path = request.json.get('path')
     if not project_path:
@@ -764,11 +764,11 @@ def run_project():
         elif project_type in ['react', 'nodejs']:
             cmd = 'npm start'
         elif project_type == 'python':
-            if os.path.exists(os.path.join(project_path, 'main.py')):\
+            if os.path.exists(os.path.join(project_path, 'main.py')):
                 cmd = 'python main.py'
-            elif os.path.exists(os.path.join(project_path, 'app.py')):\
+            elif os.path.exists(os.path.join(project_path, 'app.py')):
                 cmd = 'python app.py'
-            else:\
+            else:
                 cmd = 'python'
         else:
             cmd = 'npm start'
@@ -812,24 +812,18 @@ def get_icon():
 @project_bp.route('/launch', methods=['POST'])
 def launch():
     project_path = request.json.get('path')
-    vscode_exe = find_vscode_executable()
-    
-    if vscode_exe and project_path and os.path.isdir(project_path):
-        try:
-            subprocess.Popen([vscode_exe, project_path], creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
-            project_name = os.path.basename(project_path)
-            wait_for_vscode_window(project_name)
-            return jsonify({'status': 'success', 'message': 'Opening...', 'project_name': project_name})
-        except Exception as e:
-            return jsonify({'status': 'error', 'message': str(e)}), 500
+    if project_path:
+        project_name = os.path.basename(project_path.rstrip('\\/'))
+        return jsonify({'status': 'success', 'message': 'Ready', 'project_name': project_name})
     return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
 
 @project_bp.route('/focus', methods=['POST'])
 def focus():
     title_to_find = request.json.get('title')
-    project_name = focus_and_maximize_window(title_to_find)
-    if project_name:
-        return jsonify({'status': 'success', 'message': 'Focused', 'project_name': project_name})
+    if title_to_find:
+        raw_title = title_to_find.replace(" - Visual Studio Code", "").strip()
+        project_name = raw_title.split(" - ")[-1].strip() if " - " in raw_title else raw_title
+        return jsonify({'status': 'success', 'message': 'Ready', 'project_name': project_name})
     return jsonify({'status': 'error', 'message': 'Window not found'}), 404
 
 @project_bp.route('/ignore', methods=['POST'])

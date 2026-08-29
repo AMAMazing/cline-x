@@ -27,12 +27,6 @@ def focus_and_maximize_window(title_to_find, is_exact_match=False):
         project_name = raw_title
 
     try:
-        force_bring_to_front(win._hWnd)
-        if optimiseWait:
-            try:
-                optimiseWait('maximize', autopath='linkimages')
-            except Exception as e:
-                logger.error(f"OptimiseWait maximize failed: {e}")
         return project_name
     except Exception as e:
         logger.error(f"Error focusing window: {e}")
@@ -49,9 +43,6 @@ def wait_for_vscode_window(project_name, timeout_deciseconds=100):
             for win in windows:
                 if "Visual Studio Code" in win.title:
                     try:
-                        force_bring_to_front(win._hWnd)
-                        if optimiseWait:
-                            optimiseWait('maximize', autopath='linkimages')
                         return True
                     except Exception as e:
                         logger.error(f"Error focusing new window: {e}")

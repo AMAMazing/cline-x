@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VS Code Launcher</title>
+    <title>Project Dashboard - Cline-X</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -81,7 +81,8 @@
                     <div class="group relative bg-[#111] border border-green-900/30 hover:border-green-500/50 rounded-2xl p-6 shadow-lg hover:shadow-green-900/10 transition-all cursor-pointer flex flex-col items-center justify-center gap-3 h-40"
                          data-title="{{ win.full_title }}" 
                          data-path="{{ win.path }}"
-                         onclick="focusProject(this.dataset.title)">
+                         data-name="{{ win.name }}"
+                         onclick="openProject(this.dataset.name)">
                         
                         <!-- Top Left Project Type Icon -->
                         {% if win.project_type and win.project_type != 'unknown' %}
@@ -172,9 +173,9 @@
             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4" id="all-projects-grid">
                 {% for project in projects %}
                     <div class="project-button group relative bg-[#111] border border-gray-800 hover:border-blue-500/50 rounded-2xl p-6 shadow-lg hover:shadow-blue-900/10 transition-all cursor-pointer flex flex-col items-center justify-center gap-3 h-40"
-                         data-name="{{ project.name|lower }}" 
+                         data-name="{{ project.name }}" 
                          data-path="{{ project.path }}" 
-                         onclick="launchProject(this.dataset.path)">
+                         onclick="openProject(this.dataset.name)">
                         
                         <!-- Top Left Project Type Icon -->
                         {% if project.project_type and project.project_type != 'unknown' %}
@@ -299,6 +300,25 @@
         let activeTerminalPoller = null;
         let activeTerminalProject = null;
 
+        // --- Direct Chat Navigation ---
+        function openProject(projectName) {
+            if (!projectName) return;
+            window.location.href = '/chat?project=' + encodeURIComponent(projectName);
+        }
+
+        function launchProject(path) {
+            if (!path) return;
+            const name = path.split(/[\\/]/).filter(Boolean).pop();
+            openProject(name);
+        }
+
+        function focusProject(title) {
+            if (!title) return;
+            const rawTitle = title.replace(" - Visual Studio Code", "").trim();
+            const name = rawTitle.includes(" - ") ? rawTitle.split(" - ").pop().trim() : rawTitle;
+            openProject(name);
+        }
+
         // --- Web GUI Terminal Viewer ---
         function openExpoWebTerminal(event, element) {
             event.stopPropagation();
@@ -319,10 +339,10 @@
                     const data = await res.json();
                     if (data.status === 'success') {
                         if (data.project_name) {
-                            titleSpan.textContent = `Expo Terminal [${data.project_name}]`;
+                            titleSpan.textContent = 'Expo Terminal [' + data.project_name + ']';
                         }
                         if (data.logs && data.logs.length > 0) {
-                            logsBox.innerHTML = data.logs.map(l => `<div class="leading-relaxed">> ${escapeHtml(l)}</div>`).join('');
+                            logsBox.innerHTML = data.logs.map(l => '<div class="leading-relaxed">> ' + escapeHtml(l) + '</div>').join('');
                             logsBox.scrollTop = logsBox.scrollHeight;
                         } else {
                             logsBox.innerHTML = '<div class="text-gray-500">> Waiting for output from this project...</div>';
@@ -396,14 +416,13 @@
                 const checkData = await checkRes.json();
                 if (checkData.status === 'success' && checkData.has_active && checkData.active_path !== path) {
                     const confirmSwitch = confirm(
-                        `You can only have 1 tunnel open at a time.\n\n` +
-                        `Project "${checkData.active_name}" currently has an active tunnel.\n\n` +
-                        `Would you like to stop "${checkData.active_name}" and switch to this project?`
+                        "You can only have 1 tunnel open at a time.\n\n" +
+                        "Project \"" + checkData.active_name + "\" currently has an active tunnel.\n\n" +
+                        "Would you like to stop \"" + checkData.active_name + "\" and switch to this project?"
                     );
                     if (!confirmSwitch) {
-                        return; // User cancelled
+                        return;
                     }
-                    // Stop current active tunnel first
                     await fetch('/api/stop_expo_tunnel', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
@@ -471,7 +490,7 @@
         }
 
         function escapeHtml(text) {
-            return text.replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">");
+            return String(text || '').replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">");
         }
 
         // --- Run Project Logic (Non-Expo) ---
@@ -544,7 +563,7 @@
             let filter = this.value.toLowerCase();
             let buttons = document.querySelectorAll('#all-projects-grid .project-button');
             buttons.forEach(function(button) {
-                let name = button.dataset.name; 
+                let name = (button.dataset.name || '').toLowerCase(); 
                 if (name.includes(filter)) {
                     button.classList.remove('hidden');
                     button.style.display = 'flex';
@@ -554,46 +573,6 @@
                 }
             });
         });
-
-        // --- Launch Logic ---
-        async function launchProject(path) {
-            try {
-                const response = await fetch('/launch', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-                    body: JSON.stringify({ path: path }),
-                });
-                const data = await response.json();
-                if(data.status === 'success') {
-                    window.location.href = '/chat?project=' + encodeURIComponent(data.project_name);
-                } else {
-                    alert("Launch failed: " + data.message);
-                }
-            } catch (error) { 
-                console.error('Error:', error); 
-                alert("An error occurred while launching.");
-            }
-        }
-
-        // --- Focus Logic ---
-        async function focusProject(title) {
-            try {
-                const response = await fetch('/focus', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-                    body: JSON.stringify({ title: title }),
-                });
-                const data = await response.json();
-                if (data.status === 'success') {
-                    window.location.href = '/chat?project=' + encodeURIComponent(data.project_name);
-                } else {
-                    alert("Could not focus window: " + data.message);
-                }
-            } catch (error) { 
-                console.error('Error:', error); 
-                alert("An error occurred while focusing.");
-            }
-        }
 
         // --- Ignore Logic ---
         async function ignoreProject(event, element) {
@@ -628,7 +607,7 @@
                 const grid = document.getElementById('active-grid');
                 const section = document.getElementById('active-section');
 
-                if (windows.length === 0) {
+                if (!windows || windows.length === 0) {
                     section.classList.add('hidden');
                     grid.innerHTML = '';
                     return;
@@ -637,104 +616,99 @@
                 section.classList.remove('hidden');
                 grid.innerHTML = windows.map(win => {
                     let iconHtml = win.has_icon 
-                        ? `<img class="w-10 h-10 object-contain" src="/get_icon?path=${encodeURIComponent(win.path)}" alt="Icon">` 
-                        : `<div class="text-green-400"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-8 h-8"><path stroke-linecap="round" stroke-linejoin="round" d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" /></svg></div>`;
+                        ? '<img class="w-10 h-10 object-contain" src="/get_icon?path=' + encodeURIComponent(win.path) + '" alt="Icon">'
+                        : '<div class="text-green-400"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-8 h-8"><path stroke-linecap="round" stroke-linejoin="round" d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" /></svg></div>';
                     
-                    let safeTitle = win.full_title.replace(/"/g, '"');
-                    let safePath = win.path ? win.path.replace(/"/g, '"') : '';
-                    let devLinkAttr = win.dev_link ? win.dev_link.replace(/"/g, '"') : '';
+                    let safeTitle = escapeHtml(win.full_title || '');
+                    let safePath = escapeHtml(win.path || '');
+                    let devLinkAttr = escapeHtml(win.dev_link || '');
+                    let winName = escapeHtml(win.name || '');
                     let isExpo = win.project_type === 'expojs';
                     
-                    let typeIconHtml = (win.project_type && win.project_type !== 'unknown') ? `
-                        <div class="absolute top-3 left-3 opacity-80 group-hover:opacity-100 transition-opacity" title="${win.project_type}">
-                            ${getTypeIconSvg(win.project_type)}
-                        </div>
-                    ` : '';
+                    let typeIconHtml = (win.project_type && win.project_type !== 'unknown') ? 
+                        '<div class="absolute top-3 left-3 opacity-80 group-hover:opacity-100 transition-opacity" title="' + escapeHtml(win.project_type) + '">' +
+                            getTypeIconSvg(win.project_type) +
+                        '</div>' : '';
 
-                    let editLinkBtn = win.path ? `
-                        <button class="absolute top-2 right-2 p-1.5 rounded-full hover:bg-blue-500/10 hover:text-blue-400 text-gray-700 opacity-0 group-hover:opacity-100 transition-all z-10"
-                             title="Edit Dev Link" 
-                             data-path="${safePath}"
-                             data-link="${devLinkAttr}"
-                             onclick="editDevLink(event, this)">
-                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                        </button>
-                    ` : '';
+                    let editLinkBtn = win.path ? 
+                        '<button class="absolute top-2 right-2 p-1.5 rounded-full hover:bg-blue-500/10 hover:text-blue-400 text-gray-700 opacity-0 group-hover:opacity-100 transition-all z-10"' +
+                             ' title="Edit Dev Link"' +
+                             ' data-path="' + safePath + '"' +
+                             ' data-link="' + devLinkAttr + '"' +
+                             ' onclick="editDevLink(event, this)">' +
+                             '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>' +
+                        '</button>' : '';
 
                     let actionBtns = '';
                     if (isExpo && win.path) {
                         if (win.dev_link) {
-                            actionBtns = `
-                                <div class="expo-running-toolbar absolute bottom-3 right-3 flex items-center bg-[#1a1a1a] border border-blue-900/40 rounded-xl overflow-hidden shadow-lg z-10">
-                                    <button class="p-2 hover:bg-blue-500/20 text-blue-400 transition-all"
-                                         title="Open Terminal Viewer in Web GUI" 
-                                         data-path="${safePath}"
-                                         onclick="openExpoWebTerminal(event, this)">
-                                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>
-                                    </button>
-                                    <div class="w-[1px] h-4 bg-gray-800"></div>
-                                    <button class="p-2 hover:bg-green-500/20 text-green-400 transition-all"
-                                         title="Open Expo Tunnel: ${devLinkAttr}" 
-                                         data-link="${devLinkAttr}"
-                                         onclick="openDevLink(event, this)">
-                                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/></svg>
-                                    </button>
-                                    <div class="w-[1px] h-4 bg-gray-800"></div>
-                                    <button class="p-2 hover:bg-red-500/20 text-red-400 transition-all"
-                                         title="Stop Expo Tunnel" 
-                                         data-path="${safePath}"
-                                         onclick="stopExpoTunnel(event, this)">
-                                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-                                    </button>
-                                </div>
-                            `;
+                            actionBtns = 
+                                '<div class="expo-running-toolbar absolute bottom-3 right-3 flex items-center bg-[#1a1a1a] border border-blue-900/40 rounded-xl overflow-hidden shadow-lg z-10">' +
+                                    '<button class="p-2 hover:bg-blue-500/20 text-blue-400 transition-all"' +
+                                         ' title="Open Terminal Viewer in Web GUI"' +
+                                         ' data-path="' + safePath + '"' +
+                                         ' onclick="openExpoWebTerminal(event, this)">' +
+                                         '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>' +
+                                    '</button>' +
+                                    '<div class="w-[1px] h-4 bg-gray-800"></div>' +
+                                    '<button class="p-2 hover:bg-green-500/20 text-green-400 transition-all"' +
+                                         ' title="Open Expo Tunnel: ' + devLinkAttr + '"' +
+                                         ' data-link="' + devLinkAttr + '"' +
+                                         ' onclick="openDevLink(event, this)">' +
+                                         '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/></svg>' +
+                                    '</button>' +
+                                    '<div class="w-[1px] h-4 bg-gray-800"></div>' +
+                                    '<button class="p-2 hover:bg-red-500/20 text-red-400 transition-all"' +
+                                         ' title="Stop Expo Tunnel"' +
+                                         ' data-path="' + safePath + '"' +
+                                         ' onclick="stopExpoTunnel(event, this)">' +
+                                         '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>' +
+                                    '</button>' +
+                                '</div>';
                         } else {
-                            actionBtns = `
-                                <button class="expo-play-btn absolute bottom-3 right-3 w-8 h-8 rounded-xl bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center transition-all z-10 shadow-lg group/expo active:scale-95"
-                                     title="Start Expo Tunnel" 
-                                     data-path="${safePath}"
-                                     onclick="triggerExpoTunnel(event, this)">
-                                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" class="group-hover/expo:scale-110 transition-transform"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                                </button>
-                            `;
+                            actionBtns = 
+                                '<button class="expo-play-btn absolute bottom-3 right-3 w-8 h-8 rounded-xl bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center transition-all z-10 shadow-lg group/expo active:scale-95"' +
+                                     ' title="Start Expo Tunnel"' +
+                                     ' data-path="' + safePath + '"' +
+                                     ' onclick="triggerExpoTunnel(event, this)">' +
+                                     '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" class="group-hover/expo:scale-110 transition-transform"><polygon points="5 3 19 12 5 21 5 3"/></svg>' +
+                                '</button>';
                         }
                     } else {
-                        let runBtn = win.path ? `
-                            <button class="absolute bottom-3 left-3 p-2 bg-[#1a1a1a] border border-green-900/30 hover:border-green-500/50 hover:bg-green-500/10 text-green-400 rounded-xl transition-all z-10 shadow-lg group/run"
-                                 title="Run Project Terminal Command" 
-                                 data-path="${safePath}"
-                                 onclick="runProject(event, this)">
-                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="group-hover/run:scale-110 transition-transform"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                            </button>
-                        ` : '';
+                        let runBtn = win.path ? 
+                            '<button class="absolute bottom-3 left-3 p-2 bg-[#1a1a1a] border border-green-900/30 hover:border-green-500/50 hover:bg-green-500/10 text-green-400 rounded-xl transition-all z-10 shadow-lg group/run"' +
+                                 ' title="Run Project Terminal Command"' +
+                                 ' data-path="' + safePath + '"' +
+                                 ' onclick="runProject(event, this)">' +
+                                 '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="group-hover/run:scale-110 transition-transform"><polygon points="5 3 19 12 5 21 5 3"/></svg>' +
+                            '</button>' : '';
 
-                        let openLinkBtn = win.dev_link ? `
-                            <button class="absolute bottom-3 right-3 p-2 bg-[#1a1a1a] border border-green-900/30 hover:border-green-500/50 hover:bg-green-500/10 text-green-400 rounded-xl transition-all z-10 shadow-lg group/link"
-                                 title="Open Dev Link: ${devLinkAttr}" 
-                                 data-link="${devLinkAttr}"
-                                 onclick="openDevLink(event, this)">
-                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/></svg>
-                            </button>
-                        ` : '';
+                        let openLinkBtn = win.dev_link ? 
+                            '<button class="absolute bottom-3 right-3 p-2 bg-[#1a1a1a] border border-green-900/30 hover:border-green-500/50 hover:bg-green-500/10 text-green-400 rounded-xl transition-all z-10 shadow-lg group/link"' +
+                                 ' title="Open Dev Link: ' + devLinkAttr + '"' +
+                                 ' data-link="' + devLinkAttr + '"' +
+                                 ' onclick="openDevLink(event, this)">' +
+                                 '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/></svg>' +
+                            '</button>' : '';
                         actionBtns = runBtn + openLinkBtn;
                     }
 
-                    return `
-                    <div class="group relative bg-[#111] border border-green-900/30 hover:border-green-500/50 rounded-2xl p-6 shadow-lg hover:shadow-green-900/10 transition-all cursor-pointer flex flex-col items-center justify-center gap-3 h-40"
-                         data-title="${safeTitle}" 
-                         data-path="${safePath}"
-                         onclick="focusProject(this.dataset.title)">
-                        ${typeIconHtml}
-                        <div class="expo-status-badge hidden absolute top-3 right-3 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 border border-blue-500/30 text-blue-400 z-20 shadow-sm animate-pulse">
-                            Starting...
-                        </div>
-                        ${editLinkBtn}
-                        ${actionBtns}
-                        ${iconHtml}
-                        <div class="text-sm font-medium text-gray-300 group-hover:text-green-400 text-center line-clamp-2 transition-colors">
-                            ${win.name}
-                        </div>
-                    </div>`;
+                    return '<div class="group relative bg-[#111] border border-green-900/30 hover:border-green-500/50 rounded-2xl p-6 shadow-lg hover:shadow-green-900/10 transition-all cursor-pointer flex flex-col items-center justify-center gap-3 h-40"' +
+                         ' data-title="' + safeTitle + '"' +
+                         ' data-path="' + safePath + '"' +
+                         ' data-name="' + winName + '"' +
+                         ' onclick="openProject(this.dataset.name)">' +
+                        typeIconHtml +
+                        '<div class="expo-status-badge hidden absolute top-3 right-3 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 border border-blue-500/30 text-blue-400 z-20 shadow-sm animate-pulse">' +
+                            'Starting...' +
+                        '</div>' +
+                        editLinkBtn +
+                        actionBtns +
+                        iconHtml +
+                        '<div class="text-sm font-medium text-gray-300 group-hover:text-green-400 text-center line-clamp-2 transition-colors">' +
+                            winName +
+                        '</div>' +
+                    '</div>';
                 }).join('');
 
             } catch (e) { console.error("Polling error", e); }
