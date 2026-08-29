@@ -32,7 +32,7 @@ from modules.terminal_utils import clear_previous_alert, print_completion_alert,
 from modules.notify_utils import send_ntfy_notification
 
 # --- Extracted Modules ---
-from modules.chat_manager import add_chat_message, chat_history
+from modules.chat_manager import add_chat_message, chat_history, get_project_messages, current_active_project, current_active_session_id
 from modules.llm_utils import get_content_text
 from modules.automation_utils import process_optimisewait_message
 from modules.pomodoro_manager import record_sprint_completion, pomodoro_state
@@ -101,8 +101,6 @@ def get_listening_pids_on_port(port: int) -> List[int]:
                 line = line.strip()
                 if not line:
                     continue
-                # Match TCP lines listening on :port
-                # Example: TCP    0.0.0.0:3001    0.0.0.0:0    LISTENING    12345
                 match = re.search(rf':{port}\s+.*(?:LISTENING|ESTABLISHED)\s+(\d+)', line, re.IGNORECASE)
                 if match:
                     found_pid = int(match.group(1))
@@ -146,7 +144,6 @@ def cleanup_lock_and_mutex():
 def enforce_single_instance(port: int = 3001):
     global _named_mutex_handle
 
-    # 1. Kill any existing instance recorded in lock file
     if os.path.exists(LOCK_FILE_PATH):
         try:
             with open(LOCK_FILE_PATH, 'r') as f:
@@ -160,20 +157,16 @@ def enforce_single_instance(port: int = 3001):
         except Exception:
             pass
 
-    # 2. Check and terminate any process listening on port 3001
     occupying_pids = get_listening_pids_on_port(port)
     for p in occupying_pids:
         print(f"{colorama.Fore.YELLOW}[Single-Instance] Port {port} is occupied by PID {p}. Freeing port...{colorama.Style.RESET_ALL}")
         terminate_pid_tree(p)
 
-    # 3. Wait for port 3001 to be completely released by OS
     if not wait_for_port_freed(port, max_wait_sec=3.0):
-        # Retry scan one more time if still occupied
         for p in get_listening_pids_on_port(port):
             terminate_pid_tree(p)
         wait_for_port_freed(port, max_wait_sec=2.0)
 
-    # 4. Acquire Windows Named Mutex
     if os.name == 'nt':
         try:
             mutex_name = "Local\\ClineX_FlaskServer_SingleInstance_3001"
@@ -181,7 +174,6 @@ def enforce_single_instance(port: int = 3001):
         except Exception:
             pass
 
-    # 5. Write current PID to lockfile & register exit cleanup
     try:
         with open(LOCK_FILE_PATH, 'w') as f:
             f.write(str(os.getpid()))
@@ -215,7 +207,6 @@ logger = logging.getLogger(__name__)
 logger.addHandler(handler)
 logger.setLevel(logging.DEBUG if terminal_log_level == 'debug' else logging.INFO)
 
-# --- State for clearing the alert ---
 alert_state = {'lines_printed': 0, 'active': False}
 
 app = Flask(__name__)
@@ -223,7 +214,6 @@ app.secret_key = os.urandom(24)
 app.permanent_session_lifetime = timedelta(days=30) 
 csrf = CSRFProtect(app) 
 
-# --- RATE LIMITER SETUP ---
 limiter = Limiter(
     get_remote_address,
     app=app,
@@ -231,15 +221,11 @@ limiter = Limiter(
     storage_uri="memory://"
 )
 
-# Register Blueprints
 app.register_blueprint(project_bp)
 app.register_blueprint(pomodoro_bp)
 
-# Exempt blueprints from Limiter
 limiter.exempt(project_bp)
 limiter.exempt(pomodoro_bp)
-
-# CSRF Exemptions for Pomodoro API
 csrf.exempt(pomodoro_bp)
 
 last_request_time = 0
@@ -248,7 +234,6 @@ MIN_REQUEST_INTERVAL = 5
 set_autopath(r"D:\cline-x-claudeweb\images")
 set_altpath(r"D:\cline-x-claudeweb\images\alt1440")
 
-# --- CORE LOGIC ---
 def handle_llm_interaction(prompt):
     global last_request_time
     clear_previous_alert(alert_state)
@@ -291,9 +276,8 @@ def handle_llm_interaction(prompt):
     full_prompt = re.sub(r'data:image\/png;base64,[A-Za-z0-9+\/=]+', '', fullpromptbefore)
 
     debug_mode = (terminal_log_level == 'debug')
-    return talkto(current_model, full_prompt, image_list, debug=debug_mode,humanize=True, windmouse=True)
+    return talkto(current_model, full_prompt, image_list, debug=debug_mode, humanize=True, windmouse=True)
 
-# --- FLASK ROUTES ---
 @app.route('/', methods=['GET'])
 @limiter.exempt
 def home():
@@ -601,13 +585,12 @@ def chat_completions():
             if terminal_alert_level in ['completions', 'all']:
                 print_completion_alert(alert_state)
             
-            # --- POMODORO COMPLETION LOGIC ---
             if queue_manager.state['current_queue_task'] and queue_manager.state['current_queue_task'].get('is_pomodoro'):
                 queue_manager.state['current_queue_task']['result'] = queue_manager.state['global_last_reply']
                 pomodoro_state['completed'].append(queue_manager.state['current_queue_task'])
                 pomodoro_state['current_task'] = None
                 
-                if not pomodoro_state['queue']: # Batch finished
+                if not pomodoro_state['queue']:
                     pomodoro_state['is_break'] = False
                     record_sprint_completion(pomodoro_state.get('sprint_size', 0))
                     pomodoro_state['break_started_at'] = None
@@ -616,14 +599,12 @@ def chat_completions():
                     if ntfy_topic:
                         send_ntfy_notification(
                             topic=ntfy_topic,
-                            simple_title="🍅 Break Ended!",
+                            simple_title="Break Ended!",
                             full_content="All Sprint tasks are completed. Time to review!",
                             add_chat_message_func=chat_adder_with_full_text,
                             tags="tomato"
                         )
-            # ---------------------------------
             
-            # TRIGGER QUEUE NEXT ITEM
             threading.Thread(target=queue_manager.process_next_queue_item, args=(terminal_log_level,), daemon=True).start()
             
         elif summary:
@@ -634,7 +615,6 @@ def chat_completions():
         ntfy_topic = config.get('ntfy_topic', '')
         if ntfy_notification_level == 'all':
             if has_completion:
-                # Regular task completion ntfy (don't duplicate if it was a pomodoro, but keeping logic consistent)
                 send_ntfy_notification(
                     topic=ntfy_topic,
                     simple_title="Cline-X: Task Completion",
@@ -693,7 +673,8 @@ def chat_completions():
 def batch_status():
     return jsonify({
         'completed': queue_manager.state['global_completion_status'],
-        'last_reply': queue_manager.state['global_last_reply']
+        'last_reply': queue_manager.state['global_last_reply'],
+        'system_busy': queue_manager.state['system_busy']
     })
 
 @app.route('/send_message', methods=['POST'])
@@ -701,6 +682,7 @@ def batch_status():
 def send_message():
     data = request.json
     message = data.get('message')
+    project_name = data.get('project_name') or current_active_project
     
     if not message:
         return jsonify({'status': 'error', 'message': 'Message cannot be empty'}), 400
@@ -709,7 +691,7 @@ def send_message():
         queue_manager.state['system_busy'] = True
         queue_manager.state['global_completion_status'] = False
         queue_manager.state['global_last_reply'] = ""
-        add_chat_message('user', message)
+        add_chat_message('user', message, project_name=project_name)
         process_optimisewait_message(message, debug=(terminal_log_level == 'debug'))
         return jsonify({'status': 'success', 'message': 'Message processed'})
     except Exception as e:
@@ -719,7 +701,12 @@ def send_message():
 @app.route('/get_messages')
 @limiter.exempt
 def get_messages():
-    return jsonify(chat_history)
+    project_name = request.args.get('project') or current_active_project or 'default'
+    session_id = request.args.get('session') or current_active_session_id
+    msgs = get_project_messages(project_name, session_id)
+    if not msgs and chat_history:
+        return jsonify(chat_history)
+    return jsonify(msgs)
 
 @app.route('/restart', methods=['GET'])
 @limiter.exempt
@@ -776,12 +763,19 @@ def api_queue():
         return jsonify({'queue': queue_manager.task_queue, 'current': queue_manager.state['current_queue_task'], 'system_busy': queue_manager.state['system_busy']})
     elif request.method == 'POST':
         data = request.json
+        proj_name = data.get('project_name') or current_active_project
+        msg_text = data.get('message')
+        
         task = {
             'id': secrets.token_hex(8),
             'project_path': data.get('project_path'),
-            'project_name': data.get('project_name'),
-            'message': data.get('message')
+            'project_name': proj_name,
+            'message': msg_text
         }
+        
+        if msg_text:
+            add_chat_message('user', msg_text, project_name=proj_name)
+            
         with queue_manager.queue_lock:
             queue_manager.task_queue.append(task)
             
@@ -810,7 +804,6 @@ ngrok_tunnel = None
 if __name__ == '__main__':
     colorama.init(autoreset=True)
 
-    # Enforce single instance & clear any previous background instance on port 3001
     enforce_single_instance(port=3001)
 
     if tunnel_active:

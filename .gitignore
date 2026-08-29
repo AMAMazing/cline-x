@@ -24,3 +24,4 @@ build.bat
 .next/
 *.json
 clinex_config.json
+*.lock

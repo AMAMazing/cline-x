@@ -15,6 +15,8 @@ from modules.project_utils import (get_ui_projects_data, get_ui_active_windows, 
                                     is_expo_running, expo_process_logs, expo_process_status, start_expo_tunnel_process,
                                     stop_expo_tunnel_process, expo_active_processes, get_active_expo_project)
 from modules.window_manager import focus_and_maximize_window, wait_for_vscode_window
+from modules.chat_manager import (get_project_sessions, create_project_session, delete_project_session, 
+                                  get_project_messages, set_active_project_and_session, get_ongoing_context_prompt)
 
 logger = logging.getLogger(__name__)
 project_bp = Blueprint('project_bp', __name__)
@@ -141,7 +143,7 @@ def cline_quest():
                            unpinned_inactive_projects=unpinned_inactive_projects,
                            all_projects=all_projects)
 
-@project_bp.route('/api/toggle_pin', methods=['POST'])
+@project_bp.route('/api/toggle_pin', methods=['POST'] if True else [])
 def toggle_pin():
     project_path = request.json.get('path')
     if not project_path:
@@ -232,8 +234,129 @@ def multi_project():
 @project_bp.route('/chat')
 def chat():
     project_name = request.args.get('project', 'Project')
+    session_id = request.args.get('session')
     project_path, project_has_icon = get_project_icon_info(project_name)
+    set_active_project_and_session(project_name, session_id)
     return render_template('chat.html', project_name=project_name, project_path=project_path, project_has_icon=project_has_icon)
+
+# --- NATIVE FILE SEARCH API FOR @ MENTIONS ---
+EXCLUDED_DIRS = {
+    'node_modules', '.git', '.svn', '.hg', 'venv', '.venv', 'env', '__pycache__',
+    'dist', 'build', '.next', '.nuxt', '.output', '.expo', '.cache', 'out',
+    'coverage', 'target', 'bin', 'obj', '.idea', '.vscode', '.gradle', 'Pods'
+}
+
+EXCLUDED_EXTENSIONS = {
+    '.png', '.jpg', '.jpeg', '.gif', '.ico', '.svg', '.webp', '.mp4', '.mp3',
+    '.woff', '.woff2', '.ttf', '.eot', '.pdf', '.zip', '.tar', '.gz', '.7z',
+    '.pyc', '.pyo', '.pyd', '.dll', '.exe', '.so', '.dylib', '.lock'
+}
+
+@project_bp.route('/api/project_files')
+def api_project_files():
+    project_path = request.args.get('path')
+    query = (request.args.get('q') or '').strip().lower()
+    
+    if not project_path or not os.path.isdir(project_path):
+        return jsonify({'status': 'error', 'message': 'Invalid project path', 'files': []})
+
+    matched_files = []
+    max_results = 200
+    
+    try:
+        norm_root = os.path.normpath(project_path)
+        for root, dirs, files in os.walk(norm_root):
+            # Prune excluded directories in-place
+            dirs[:] = [d for d in dirs if d.lower() not in EXCLUDED_DIRS and not d.startswith('.')]
+            
+            rel_dir = os.path.relpath(root, norm_root)
+            if rel_dir == '.':
+                rel_dir = ''
+                
+            for file_name in files:
+                ext = os.path.splitext(file_name)[1].lower()
+                if ext in EXCLUDED_EXTENSIONS:
+                    continue
+                
+                rel_file_path = os.path.join(rel_dir, file_name).replace('\\', '/') if rel_dir else file_name
+                full_file_path = os.path.join(root, file_name)
+                
+                if query:
+                    if query not in file_name.lower() and query not in rel_file_path.lower():
+                        continue
+                
+                matched_files.append({
+                    'name': file_name,
+                    'path': rel_file_path,
+                    'full_path': full_file_path,
+                    'extension': ext.replace('.', ''),
+                    'directory': rel_dir.replace('\\', '/')
+                })
+                
+                if len(matched_files) >= max_results:
+                    break
+            if len(matched_files) >= max_results:
+                break
+                
+        # Sort so closer exact filename matches appear first
+        if query:
+            matched_files.sort(key=lambda x: (
+                0 if x['name'].lower() == query else
+                1 if x['name'].lower().startswith(query) else
+                2 if query in x['name'].lower() else 3,
+                len(x['path'])
+            ))
+        else:
+            matched_files.sort(key=lambda x: (x['directory'] != '', x['path']))
+            
+        return jsonify({
+            'status': 'success',
+            'files': matched_files,
+            'total': len(matched_files)
+        })
+    except Exception as e:
+        logger.error(f"Error scanning project files: {e}")
+        return jsonify({'status': 'error', 'message': str(e), 'files': []}), 500
+
+# --- CHAT SESSIONS & ONGOING CONTEXT API ---
+@project_bp.route('/api/chat_sessions')
+def api_chat_sessions():
+    project_name = request.args.get('project', 'default')
+    sessions = get_project_sessions(project_name)
+    return jsonify({'status': 'success', 'sessions': sessions})
+
+@project_bp.route('/api/chat_session/create', methods=['POST'])
+def api_create_session():
+    data = request.get_json() or {}
+    project_name = data.get('project', 'default')
+    title = data.get('title')
+    session_id = create_project_session(project_name, title)
+    return jsonify({'status': 'success', 'session_id': session_id})
+
+@project_bp.route('/api/chat_session/delete', methods=['POST'])
+def api_delete_session():
+    data = request.get_json() or {}
+    project_name = data.get('project', 'default')
+    session_id = data.get('session_id')
+    if not session_id:
+        return jsonify({'status': 'error', 'message': 'Missing session_id'}), 400
+    ok = delete_project_session(project_name, session_id)
+    return jsonify({'status': 'success' if ok else 'error'})
+
+@project_bp.route('/api/chat_session/select', methods=['POST'])
+def api_select_session():
+    data = request.get_json() or {}
+    project_name = data.get('project', 'default')
+    session_id = data.get('session_id')
+    set_active_project_and_session(project_name, session_id)
+    messages = get_project_messages(project_name, session_id)
+    return jsonify({'status': 'success', 'messages': messages, 'session_id': session_id})
+
+@project_bp.route('/api/project_context')
+def api_project_context():
+    project_name = request.args.get('project', 'default')
+    context_text = get_ongoing_context_prompt(project_name)
+    return jsonify({'status': 'success', 'context': context_text})
 
 @project_bp.route('/api/active')
 def api_active():
@@ -315,7 +438,6 @@ def api_git_status():
                 fname = fname.split(' -> ')[-1]
             file_list.append({'status': st, 'file': fname})
             
-    # Also get current branch name
     _, branch_out, _ = run_git_cmd(project_path, ['branch', '--show-current'])
     branch_name = branch_out.strip() or 'HEAD'
 
@@ -337,7 +459,6 @@ def api_git_diff():
     if not is_git:
         return jsonify({'status': 'error', 'message': 'Not a git repository', 'diffs': []})
     
-    # Check modified files list
     _, status_out, _ = run_git_cmd(project_path, ['status', '--short'])
     status_lines = [l.rstrip() for l in status_out.splitlines() if l.strip()]
     
@@ -350,12 +471,10 @@ def api_git_diff():
                 fname = fname.split(' -> ')[-1]
             files_map[fname] = st
             
-    # Try diff HEAD, fallback to plain diff
     _, diff_out, _ = run_git_cmd(project_path, ['diff', 'HEAD'])
     if not diff_out.strip():
         _, diff_out, _ = run_git_cmd(project_path, ['diff'])
         
-    # Split per file diff
     diff_sections = []
     raw_sections = diff_out.split('diff --git ')
     
@@ -386,7 +505,6 @@ def api_git_diff():
             'diff': full_section
         })
         
-    # Also include untracked / other files that have no git diff output
     diffed_files = {d['file'] for d in diff_sections}
     for fname, st in files_map.items():
         if fname not in diffed_files:
@@ -432,7 +550,6 @@ def api_git_commits():
     if not is_git:
         return jsonify({'status': 'error', 'message': 'Not a git repository', 'commits': []})
 
-    # Format: full_hash | short_hash | author_name | author_email | relative_date | iso_date | subject
     delimiter = "~~~GIT_COMMIT_SEP~~~"
     log_format = f"%H{delimiter}%h{delimiter}%an{delimiter}%ae{delimiter}%cr{delimiter}%cd{delimiter}%s"
     
@@ -484,24 +601,20 @@ def api_git_commit_push():
         if not is_git:
             return jsonify({'status': 'error', 'message': 'Not a git repository'}), 400
 
-        # 1. Stage all changes
         ok_add, _, err_add = run_git_cmd(project_path, ['add', '-A'])
         if not ok_add:
             return jsonify({'status': 'error', 'message': f'Failed to stage changes: {err_add}'}), 500
 
-        # Check if anything is staged to commit
         _, status_out, _ = run_git_cmd(project_path, ['status', '--porcelain'])
         if not status_out.strip():
             return jsonify({'status': 'error', 'message': 'No changes detected to commit.'}), 400
 
-        # 2. Commit
         ok_commit, commit_out, err_commit = run_git_cmd(project_path, ['commit', '-m', commit_message])
         if not ok_commit:
             return jsonify({'status': 'error', 'message': f'Commit failed: {err_commit or commit_out}'}), 500
 
         push_output = ""
         pushed = False
-        # 3. Push if requested
         if do_push:
             ok_push, push_out, err_push = run_git_cmd(project_path, ['push'])
             if not ok_push:
@@ -579,7 +692,6 @@ def open_expo_tunnel_route():
             
         norm_path = os.path.normcase(os.path.normpath(project_path))
         
-        # Stop any other running expo tunnel process if switching
         active_norm_path = get_active_expo_project()
         if active_norm_path and active_norm_path != norm_path:
             stop_expo_tunnel_process(active_norm_path)
@@ -652,11 +764,11 @@ def run_project():
         elif project_type in ['react', 'nodejs']:
             cmd = 'npm start'
         elif project_type == 'python':
-            if os.path.exists(os.path.join(project_path, 'main.py')):
+            if os.path.exists(os.path.join(project_path, 'main.py')):\
                 cmd = 'python main.py'
-            elif os.path.exists(os.path.join(project_path, 'app.py')):
+            elif os.path.exists(os.path.join(project_path, 'app.py')):\
                 cmd = 'python app.py'
-            else:
+            else:\
                 cmd = 'python'
         else:
             cmd = 'npm start'
