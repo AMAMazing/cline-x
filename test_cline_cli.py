@@ -40,7 +40,7 @@ def run_diagnostics(timeout_minutes: float = None) -> bool:
     print("\n[Step 1] Checking Executable Discovery...")
     exe = find_cline_executable()
     available = is_cline_available()
-    print(f" -> Executable Path: {exe}")
+    print(f" -> Executable: {exe}")
     print(f" -> Available: {available}")
 
     if not available or not exe:
@@ -57,7 +57,7 @@ def run_diagnostics(timeout_minutes: float = None) -> bool:
     else:
         print(f"[OK] Detected Cline CLI version: {version}")
 
-    # 3. Check Command Construction
+    # 3. Check Clean Command Construction
     print(f"\n[Step 3] Checking Command Construction ({timeout_minutes}m timeout)...")
     cmd = build_cline_command(
         prompt="Say Hi in attempt completion",
@@ -65,23 +65,27 @@ def run_diagnostics(timeout_minutes: float = None) -> bool:
         yolo=True,
         timeout=timeout_seconds
     )
-    print(f" -> Constructed Command: {' '.join(cmd)}")
+    cmd_str = ' '.join(f'"{c}"' if ' ' in c else c for c in cmd)
+    print(f" -> Constructed Command: {cmd_str}")
+
+    if cmd[0] != "cline":
+        print("[FAIL] Command does not start with 'cline'!")
+        return False
+
+    if "-m" in cmd:
+        print("[FAIL] Redundant -m flag present in command!")
+        return False
 
     if version and version.startswith("2."):
         if "-P" in cmd or "-k" in cmd:
             print("[FAIL] Incompatible flags (-P or -k) present for Cline 2.x!")
             return False
-        print("[OK] Correct flag formatting for Cline 2.x verified.")
-    elif version and version.startswith("3."):
-        if "-P" not in cmd:
-            print("[FAIL] Missing -P flag for Cline 3.x!")
-            return False
-        print("[OK] Correct flag formatting for Cline 3.x verified.")
+        print("[OK] Clean flag formatting for Cline 2.18.0 verified.")
 
     # 4. Check Subprocess Execution (Bounded by Timeout Minutes)
     print(f"\n[Step 4] Running Subprocess Execution (Max {timeout_minutes}m / {timeout_seconds}s)...")
     clear_cli_logs()
-    
+
     completion_event = threading.Event()
     result_data = {
         "exit_code": None,
@@ -116,7 +120,7 @@ def run_diagnostics(timeout_minutes: float = None) -> bool:
 
     print(f" -> Subprocess started with PID: {proc.pid}")
 
-    # Wait for completion up to the configured timeout plus a grace period
+    # Wait for completion up to configured timeout + grace period
     grace_period = 10
     total_wait = timeout_seconds + grace_period
     finished = completion_event.wait(timeout=total_wait)
@@ -152,7 +156,6 @@ if __name__ == "__main__":
     )
     args, unknown = parser.parse_known_args()
 
-    # Also allow passing bare number as first positional argument
     minutes_val = args.minutes
     if minutes_val is None and unknown:
         try:

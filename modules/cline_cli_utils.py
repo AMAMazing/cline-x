@@ -6,9 +6,29 @@ import threading
 import logging
 import time
 import re
+import json
 from typing import Optional, Callable, Dict, Any, List
 
 logger = logging.getLogger(__name__)
+
+# Suppress auto-updates globally across the Python process
+os.environ["CLINE_NO_AUTO_UPDATE"] = "1"
+os.environ["CLINE_DISABLE_AUTO_UPDATE"] = "1"
+os.environ["DISABLE_AUTO_UPDATE"] = "1"
+
+# Ensure %APPDATA%\npm is universally present in os.environ for both .venv and global environments
+if sys.platform.startswith("win"):
+    appdata = os.environ.get("APPDATA", "")
+    if appdata:
+        npm_global_dir = os.path.join(appdata, "npm")
+        curr_path = os.environ.get("PATH", "")
+        if npm_global_dir.lower() not in curr_path.lower():
+            os.environ["PATH"] = npm_global_dir + os.pathsep + curr_path
+
+    # Ensure PATHEXT includes .CMD and .BAT
+    pathext = os.environ.get("PATHEXT", "")
+    if ".CMD" not in pathext.upper():
+        os.environ["PATHEXT"] = pathext + ";.CMD;.BAT"
 
 # Global tracker for active Cline CLI process
 active_cline_process: Optional[subprocess.Popen] = None
@@ -22,6 +42,41 @@ buffer_lock = threading.Lock()
 # Cached CLI version
 _cached_cline_version: Optional[str] = None
 _cached_version_lock = threading.Lock()
+
+def get_universal_env() -> Dict[str, str]:
+    """
+    Returns an environment dict ensuring npm global paths, local proxy
+    variables, and auto-update suppression are always set, whether executing
+    inside a .venv or outside.
+    """
+    env = os.environ.copy()
+
+    # Suppress Cline CLI 2.18.0 auto-update checks and popup updater terminals
+    env["CLINE_NO_AUTO_UPDATE"] = "1"
+    env["CLINE_DISABLE_AUTO_UPDATE"] = "1"
+    env["DISABLE_AUTO_UPDATE"] = "1"
+
+    if sys.platform.startswith("win"):
+        appdata = os.environ.get("APPDATA", "")
+        if appdata:
+            npm_dir = os.path.join(appdata, "npm")
+            curr_p = env.get("PATH", "")
+            if npm_dir.lower() not in curr_p.lower():
+                env["PATH"] = npm_dir + os.pathsep + curr_p
+        pathext = env.get("PATHEXT", "")
+        if ".CMD" not in pathext.upper():
+            env["PATHEXT"] = pathext + ";.CMD;.BAT"
+
+    # Local proxy configuration
+    env["OPENAI_BASE_URL"] = "http://127.0.0.1:3001"
+    try:
+        from modules.auth_utils import API_KEY
+        env["OPENAI_API_KEY"] = API_KEY or "dummy"
+    except ImportError:
+        env["OPENAI_API_KEY"] = "dummy"
+
+    env["AI_SDK_LOG_WARNINGS"] = "false"
+    return env
 
 def add_log_entry(stream_type: str, text: str):
     """Appends a line to the live CLI log buffer."""
@@ -58,64 +113,32 @@ def clear_cli_logs():
     with buffer_lock:
         cli_log_buffer.clear()
 
-def find_cline_executable() -> Optional[str]:
+def find_cline_executable() -> str:
     """
-    Locates the 'cline' CLI binary on the system.
-    Searches system PATH and standard global node/npm locations.
+    Returns 'cline' as the universal executable name.
     """
-    found = shutil.which("cline")
-    if found:
-        return found
-
-    if sys.platform.startswith("win"):
-        appdata = os.environ.get("APPDATA", "")
-        localappdata = os.environ.get("LOCALAPPDATA", "")
-        program_files = os.environ.get("ProgramFiles", "")
-        
-        candidates = [
-            os.path.join(appdata, "npm", "cline.cmd"),
-            os.path.join(appdata, "npm", "cline.exe"),
-            os.path.join(appdata, "npm", "cline.ps1"),
-            os.path.join(localappdata, "Programs", "cline", "bin", "cline.cmd"),
-            os.path.join(localappdata, "Programs", "cline", "cline.exe"),
-            os.path.join(program_files, "nodejs", "cline.cmd"),
-        ]
-        
-        for candidate in candidates:
-            if os.path.exists(candidate):
-                return candidate
-                
-        try:
-            res = subprocess.run(["where", "cline"], capture_output=True, text=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
-            first_line = res.stdout.strip().splitlines()[0]
-            if os.path.exists(first_line):
-                return first_line
-        except Exception:
-            pass
-    else:
-        candidates = [
-            "/usr/local/bin/cline",
-            "/usr/bin/cline",
-            os.path.expanduser("~/.npm-global/bin/cline"),
-        ]
-        for candidate in candidates:
-            if os.path.exists(candidate):
-                return candidate
-
     return "cline"
 
 def is_cline_available() -> bool:
     """Checks if cline CLI executable is installed and runnable."""
-    exe = find_cline_executable()
-    if not exe:
-        return False
-    if exe == "cline" and not shutil.which("cline"):
-        return False
-    return True
+    if shutil.which("cline"):
+        return True
+
+    if sys.platform.startswith("win"):
+        appdata = os.environ.get("APPDATA", "")
+        if appdata:
+            if os.path.exists(os.path.join(appdata, "npm", "cline.cmd")) or \
+               os.path.exists(os.path.join(appdata, "npm", "cline.ps1")) or \
+               os.path.exists(os.path.join(appdata, "npm", "node_modules", "cline", "package.json")):
+                return True
+
+    return bool(get_cline_version())
 
 def get_cline_version(cline_bin: Optional[str] = None, force_refresh: bool = False) -> Optional[str]:
     """
-    Detects the installed Cline CLI version string (e.g. '2.18.0' or '3.0.61').
+    Detects the installed Cline CLI version string (e.g. '2.18.0').
+    Checks global npm package.json first for instant, non-blocking lookup,
+    then falls back to 'cline version'.
     Results are cached in-memory unless force_refresh is True.
     """
     global _cached_cline_version
@@ -123,29 +146,49 @@ def get_cline_version(cline_bin: Optional[str] = None, force_refresh: bool = Fal
         if _cached_cline_version and not force_refresh:
             return _cached_cline_version
 
-        bin_path = cline_bin or find_cline_executable() or "cline"
+        # 1. Fast, instant check via package.json
+        if sys.platform.startswith("win"):
+            appdata = os.environ.get("APPDATA", "")
+            if appdata:
+                pkg_json = os.path.join(appdata, "npm", "node_modules", "cline", "package.json")
+                if os.path.isfile(pkg_json):
+                    try:
+                        with open(pkg_json, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                            v = data.get("version")
+                            if v:
+                                _cached_cline_version = v
+                                return _cached_cline_version
+                    except Exception:
+                        pass
+
+        # 2. CLI fallback
+        env = get_universal_env()
         is_windows = sys.platform.startswith("win")
         flags = subprocess.CREATE_NO_WINDOW if is_windows else 0
-        try:
-            use_shell = is_windows and (bin_path.lower().endswith(".cmd") or bin_path.lower().endswith(".bat") or bin_path == "cline")
-            res = subprocess.run(
-                [bin_path, "--version"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-                shell=use_shell,
-                creationflags=flags
-            )
-            raw = (res.stdout or res.stderr or "").strip()
-            match = re.search(r"(\d+\.\d+\.\d+)", raw)
-            if match:
-                _cached_cline_version = match.group(1)
-            else:
-                _cached_cline_version = raw if raw else None
-        except Exception as e:
-            logger.debug(f"Could not determine Cline CLI version: {e}")
-            _cached_cline_version = None
+        bin_name = cline_bin or "cline"
 
+        for ver_cmd in [f"{bin_name} version", f"{bin_name} --version"]:
+            try:
+                res = subprocess.run(
+                    ver_cmd,
+                    capture_output=True,
+                    text=True,
+                    stdin=subprocess.DEVNULL,
+                    timeout=5,
+                    shell=True,
+                    env=env,
+                    creationflags=flags
+                )
+                raw = (res.stdout or res.stderr or "").strip()
+                match = re.search(r"(\d+\.\d+\.\d+)", raw)
+                if match:
+                    _cached_cline_version = match.group(1)
+                    return _cached_cline_version
+            except Exception as e:
+                logger.debug(f"Version check '{ver_cmd}' failed: {e}")
+
+        _cached_cline_version = None
         return _cached_cline_version
 
 def get_default_timeout_seconds() -> int:
@@ -167,28 +210,23 @@ def build_cline_command(
     cline_bin: Optional[str] = None
 ) -> List[str]:
     """
-    Constructs the CLI argument list for invoking Cline.
-    Automatically adapts flags depending on whether Cline 2.x or 3.x is detected.
+    Constructs the clean CLI argument list for invoking Cline.
+    Starts simply with 'cline'.
+    Only specifies yolo, timeout, cwd, and prompt (model is universally configured).
     """
-    bin_path = cline_bin or find_cline_executable() or "cline"
+    bin_path = cline_bin or "cline"
     cmd = [bin_path]
 
     version = get_cline_version(bin_path)
     is_v3 = bool(version and version.startswith("3."))
 
-    try:
-        from modules.auth_utils import API_KEY
-        api_key = API_KEY or "dummy"
-    except ImportError:
-        api_key = "dummy"
-
-    # In Cline 3.x, -P (provider) and -k (api key) are supported flags.
-    # In Cline 2.x, -P and -k do not exist and cause unknown option errors.
-    # Cline 2.x reads OPENAI_BASE_URL and OPENAI_API_KEY from environment.
     if is_v3:
-        cmd.extend(["-P", "openai", "-m", "gpt-3.5-turbo", "-k", api_key])
-    else:
-        cmd.extend(["-m", "gpt-3.5-turbo"])
+        try:
+            from modules.auth_utils import API_KEY
+            api_key = API_KEY or "dummy"
+        except ImportError:
+            api_key = "dummy"
+        cmd.extend(["-P", "openai", "-k", api_key])
 
     if yolo:
         cmd.append("--yolo")
@@ -221,7 +259,8 @@ def run_cline_cli_process(
 ) -> subprocess.Popen:
     """
     Executes the Cline CLI in a subprocess and streams output asynchronously.
-    Supports timeout bounding in minutes/seconds, output buffering, and optional visible console windows.
+    Universally functions inside or outside of .venv.
+    Suppresses auto-update popups via CLINE_NO_AUTO_UPDATE=1.
     """
     global active_cline_process
 
@@ -236,8 +275,8 @@ def run_cline_cli_process(
     )
     cmd_str = " ".join(f'"{c}"' if " " in c else c for c in cmd)
     logger.info(f"Executing Cline CLI command (timeout: {effective_timeout}s): {cmd_str}")
-    
-    add_log_entry("system", f"--- Launching Cline CLI task ---")
+
+    add_log_entry("system", "--- Launching Cline CLI task ---")
     add_log_entry("system", f"Directory: {cwd or os.getcwd()}")
     add_log_entry("system", f"Timeout: {effective_timeout}s ({effective_timeout // 60}m)")
     add_log_entry("system", f"Command: {cmd_str}")
@@ -245,22 +284,8 @@ def run_cline_cli_process(
     stdout_accumulator: List[str] = []
     stderr_accumulator: List[str] = []
 
-    # Inject OpenAI Base URL pointing to local Flask proxy
-    env = os.environ.copy()
-    env["OPENAI_BASE_URL"] = "http://127.0.0.1:3001"
-    
-    try:
-        from modules.auth_utils import API_KEY
-        env["OPENAI_API_KEY"] = API_KEY or "dummy"
-    except ImportError:
-        env["OPENAI_API_KEY"] = "dummy"
-
-    # Avoid infinite AI SDK warning spam in logs
-    env["AI_SDK_LOG_WARNINGS"] = "false"
-
+    env = get_universal_env()
     is_windows = sys.platform.startswith("win")
-    bin_path = cmd[0] if cmd else "cline"
-    use_shell = is_windows and (bin_path.lower().endswith(".cmd") or bin_path.lower().endswith(".bat") or bin_path == "cline")
 
     if visible_terminal and is_windows:
         flags = subprocess.CREATE_NEW_CONSOLE
@@ -268,7 +293,7 @@ def run_cline_cli_process(
             cmd,
             cwd=cwd if (cwd and os.path.isdir(cwd)) else None,
             creationflags=flags,
-            shell=use_shell,
+            shell=True,
             env=env
         )
         with active_cline_lock:
@@ -290,7 +315,6 @@ def run_cline_cli_process(
         threading.Thread(target=wait_visible_exit, daemon=True).start()
         return proc
 
-    # Standard Headless Streaming Execution
     flags = subprocess.CREATE_NO_WINDOW if is_windows else 0
 
     proc = subprocess.Popen(
@@ -301,7 +325,7 @@ def run_cline_cli_process(
         stdin=subprocess.DEVNULL,
         text=True,
         bufsize=1,
-        shell=use_shell,
+        shell=is_windows,
         encoding="utf-8",
         errors="replace",
         creationflags=flags,
@@ -311,7 +335,6 @@ def run_cline_cli_process(
     with active_cline_lock:
         active_cline_process = proc
 
-    # Watchdog timer to ensure process terminates if timeout is specified
     if effective_timeout and effective_timeout > 0:
         def watchdog_timer():
             time.sleep(effective_timeout + 5)
@@ -361,7 +384,7 @@ def run_cline_cli_process(
         return_code = proc.wait()
         stdout_text = "".join(stdout_accumulator)
         stderr_text = "".join(stderr_accumulator)
-        
+
         with active_cline_lock:
             if active_cline_process == proc:
                 active_cline_process = None
@@ -385,9 +408,7 @@ def run_cline_cli_process(
     return proc
 
 def terminate_active_cline():
-    """
-    Terminates the currently active Cline CLI process if running.
-    """
+    """Terminates the currently active Cline CLI process if running."""
     global active_cline_process
     with active_cline_lock:
         if active_cline_process and active_cline_process.poll() is None:
