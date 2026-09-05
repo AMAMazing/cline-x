@@ -9,46 +9,40 @@
         </button>
 
         <!-- Live Terminal Chip -->
-        <button onclick="toggleTerminalConsole()" class="px-2.5 py-1.5 rounded-xl bg-gray-800/80 hover:bg-gray-700 border border-gray-700/60 text-gray-200 flex items-center gap-1.5 shrink-0 active:scale-95 transition-all shadow-sm">
-            <svg class="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>
-            <span>CLI Terminal</span>
-        </button>
+    <button onclick="toggleTerminalConsole()" class="px-2.5 py-1.5 rounded-xl bg-gray-800/80 hover:bg-gray-700 border border-gray-700/60 text-gray-200 flex items-center gap-1.5 shrink-0 active:scale-95 transition-all shadow-sm">
+        <svg class="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>
+        <span>CLI Terminal</span>
+    </button>
 
-        <!-- Visible Console Toggle Pill -->
-        <label class="px-2.5 py-1.5 rounded-xl bg-gray-800/80 hover:bg-gray-700 border border-gray-700/60 text-gray-300 flex items-center gap-1.5 shrink-0 cursor-pointer select-none">
-            <input type="checkbox" id="chk-visible-terminal" class="rounded bg-gray-900 border-gray-700 text-blue-500 focus:ring-0 w-3.5 h-3.5">
-            <span>Pop-up Window</span>
-        </label>
+    <!-- Git Status Pill -->
+    <button id="chip-git-status" onclick="openGitDiffModal()" class="px-2.5 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center gap-1.5 shrink-0 active:scale-95 transition-all cursor-pointer shadow-sm" title="Git Source Control & Diff">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 9v12"/><path d="M18 9a9 9 0 0 0-9 9"/></svg>
+        <span id="chip-git-badge">Git Diff</span>
+    </button>
 
-        <!-- Git Status Pill -->
-        <button id="chip-git-status" onclick="openGitDiffModal()" class="px-2.5 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center gap-1.5 shrink-0 active:scale-95 transition-all cursor-pointer shadow-sm" title="Git Source Control & Diff">
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 9v12"/><path d="M18 9a9 9 0 0 0-9 9"/></svg>
-            <span id="chip-git-badge">Git Diff</span>
-        </button>
+    <!-- Context Status Chip -->
+    <button onclick="toggleOngoingContext()" id="btn-context-mobile" class="px-2.5 py-1.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 flex items-center gap-1.5 shrink-0 active:scale-95 transition-all">
+        <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+        <span id="context-pill-text">Context: On</span>
+    </button>
+</div>
 
-        <!-- Context Status Chip -->
-        <button onclick="toggleOngoingContext()" id="btn-context-mobile" class="px-2.5 py-1.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 flex items-center gap-1.5 shrink-0 active:scale-95 transition-all">
-            <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
-            <span id="context-pill-text">Context: On</span>
-        </button>
-    </div>
-
-    <!-- Textarea and Send Row -->
-    <div class="flex items-end gap-2 bg-[#17171c] border border-gray-700/70 focus-within:border-blue-500/80 focus-within:ring-1 focus-within:ring-blue-500/50 rounded-2xl p-1.5 transition-all shadow-inner">
-        <textarea 
-            id="message-input" 
-            placeholder="Ask Cline CLI to edit code, run commands, or use @ to mention a file..." 
-            class="w-full bg-transparent px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none resize-none min-h-[44px] max-h-[140px] leading-relaxed font-sans"
-            rows="1"
-        ></textarea>
-        
-        <button 
-            id="btn-queue-action"
-            onclick="addToQueue()" 
-            class="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold p-3 rounded-xl transition-all shadow-lg flex items-center justify-center shrink-0 active:scale-95 disabled:opacity-50"
-            title="Dispatch Task to Cline CLI"
-        >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
-        </button>
+<!-- Textarea and Send Row -->
+<div class="flex items-end gap-2 bg-[#17171c] border border-gray-700/70 focus-within:border-blue-500/80 focus-within:ring-1 focus-within:ring-blue-500/50 rounded-2xl p-1.5 transition-all shadow-inner">
+    <textarea 
+        id="message-input" 
+        placeholder="Ask Cline CLI to edit code, run commands, or use @ to mention a file..." 
+        class="w-full bg-transparent px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none resize-none min-h-[44px] max-h-[140px] leading-relaxed font-sans"
+        rows="1"
+    ></textarea>
+    
+    <button 
+        id="btn-queue-action" 
+        onclick="addToQueue()" 
+        class="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold p-3 rounded-xl transition-all shadow-lg flex items-center justify-center shrink-0 active:scale-95 disabled:opacity-50"
+        title="Dispatch Task to Cline CLI"
+    >
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+    </button>
     </div>
 </div>
