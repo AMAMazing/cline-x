@@ -105,7 +105,8 @@
 
             if (data.logs && data.logs.length > 0) {
                 const logsBody = document.getElementById('terminal-logs-body');
-                const autoscroll = document.getElementById('chk-autoscroll').checked;
+                const autoscrollEl = document.getElementById('chk-autoscroll');
+                const autoscroll = autoscrollEl ? autoscrollEl.checked : true;
 
                 data.logs.forEach(item => {
                     const row = document.createElement('div');
@@ -702,10 +703,11 @@
 
     // --- Send & Queue Logic ---
     window.addToQueue = async function() {
-        const path = pathInput.value;
-        const name = searchInput.value.trim();
-        let msg = messageInput.value.trim();
-        const isVisibleWin = document.getElementById('chk-visible-terminal').checked;
+        const path = pathInput ? pathInput.value : '';
+        const name = searchInput ? searchInput.value.trim() : '';
+        let msg = messageInput ? messageInput.value.trim() : '';
+        const chkVisible = document.getElementById('chk-visible-terminal');
+        const isVisibleWin = chkVisible ? chkVisible.checked : false;
 
         if (!path || !name) {
             alert("Please select a valid project workspace.");
@@ -714,7 +716,7 @@
         if (!msg) return;
 
         const btn = document.getElementById('btn-queue-action');
-        btn.disabled = true;
+        if (btn) btn.disabled = true;
 
         const now = new Date();
         const timeString = ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2);
@@ -728,8 +730,10 @@
         isWaitingForResponse = true;
         renderMessages(localMessages, true);
 
-        messageInput.value = '';
-        messageInput.style.height = 'auto';
+        if (messageInput) {
+            messageInput.value = '';
+            messageInput.style.height = 'auto';
+        }
 
         if (ongoingContextEnabled) {
             try {
@@ -766,7 +770,7 @@
         } catch (e) {
             alert("Error sending task: " + e.message);
         } finally {
-            btn.disabled = false;
+            if (btn) btn.disabled = false;
         }
     };
 
