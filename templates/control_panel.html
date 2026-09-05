@@ -30,7 +30,7 @@
     </style>
 </head>
 <body class="bg-[#0A0A0A] text-gray-100 min-h-screen font-sans selection:bg-blue-500/30">
-    <div class fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/5 rounded-full blur-[100px] pointer-events-none"></div>
+    <div class="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/5 rounded-full blur-[100px] pointer-events-none"></div>
     <div class="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/5 rounded-full blur-[100px] pointer-events-none"></div>
 
     {% with 
@@ -121,6 +121,30 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Task Timeout Settings Card -->
+            <div class="bg-[#111] border border-gray-800 rounded-2xl p-6 shadow-xl md:col-span-2">
+                <h3 class="text-sm font-medium text-gray-400 mb-4 uppercase tracking-wider">⏱️ Task Timeout</h3>
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <div class="font-medium text-sm text-gray-300">Execution Timeout</div>
+                        <div class="text-xs text-gray-500">Maximum minutes allowed for a Cline CLI task before timing out</div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input type="number" id="timeoutInput" min="1" max="120" value="{{ queue_timeout_minutes }}" class="w-20 bg-gray-800/50 border border-gray-700/50 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 font-mono text-center">
+                        <span class="text-xs text-gray-400">minutes</span>
+                        <button onclick="saveTimeout()" class="bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-600/30 px-3 py-2 rounded-lg text-xs transition-colors font-medium">Save</button>
+                    </div>
+                </div>
+                <div class="flex gap-2 mt-4 pt-4 border-t border-gray-800/50" id="timeout-quick-group">
+                    <button class="flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition-all bg-gray-800/50 hover:bg-gray-700/50 text-gray-400 hover:text-white border border-gray-700/50" onclick="setQuickTimeout(2)">2m</button>
+                    <button class="flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition-all bg-gray-800/50 hover:bg-gray-700/50 text-gray-400 hover:text-white border border-gray-700/50" onclick="setQuickTimeout(5)">5m</button>
+                    <button class="flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition-all bg-gray-800/50 hover:bg-gray-700/50 text-gray-400 hover:text-white border border-gray-700/50" onclick="setQuickTimeout(10)">10m</button>
+                    <button class="flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition-all bg-gray-800/50 hover:bg-gray-700/50 text-gray-400 hover:text-white border border-gray-700/50" onclick="setQuickTimeout(15)">15m</button>
+                    <button class="flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition-all bg-gray-800/50 hover:bg-gray-700/50 text-gray-400 hover:text-white border border-gray-700/50" onclick="setQuickTimeout(30)">30m</button>
+                </div>
+            </div>
+
         </div>
 
         <div class="mt-6 bg-[#111] border border-gray-800 rounded-2xl p-6 shadow-xl opacity-75 hover:opacity-100 transition-opacity">
@@ -188,7 +212,7 @@
                         </div>
                         <button onclick="copyToClipboard('{{ api_key }}', this)" class="ml-2 text-gray-500 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-700/50 flex-shrink-0" title="Copy Key">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                             </svg>
                         </button>
                     </div>
@@ -408,12 +432,42 @@
             .then(data => {
                 if (data.success) {
                     alert("Token saved successfully!");
-                    // Optional: reload or update UI
                 } else {
                     alert("Failed to save token: " + data.error);
                 }
             })
             .catch(e => alert("Error saving token: " + e));
+        }
+
+        function setQuickTimeout(minutes) {
+            document.getElementById('timeoutInput').value = minutes;
+            saveTimeout();
+        }
+
+        function saveTimeout() {
+            const val = parseInt(document.getElementById('timeoutInput').value, 10);
+            if (!val || val <= 0) {
+                alert("Please enter a valid positive number of minutes.");
+                return;
+            }
+
+            fetch('/api/timeout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify({'timeout': val})
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    alert("Timeout updated to " + data.timeout + " minutes!");
+                } else {
+                    alert("Failed to save timeout: " + data.error);
+                }
+            })
+            .catch(e => alert("Error saving timeout: " + e));
         }
     </script>
 </body>

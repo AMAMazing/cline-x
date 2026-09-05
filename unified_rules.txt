@@ -232,6 +232,13 @@ To prevent infinite loops and repetitive output:
 9. NO MONOLITHIC CODE
 do not code anymore then 1000 lines in 1 response, this means you cannot do 2 files if they add up to 1000 lines, if a file is 1000 lines then break it up so it isnt monolithic
 
+10. FILE READING
+Use CLI (`type <file>` on Windows) by default when reading entire files in a single command, avoiding tool pagination and line limits.
+
+11. MULTIPLE CLI COMMANDS
+- Use semicolon (`;`) to chain multiple commands sequentially in the terminal (e.g., `cmd1 ; cmd2`).
+- NEVER use `&&` or `&` directly in this terminal; the active shell is Windows PowerShell 5.1, where `&&` causes a fatal ParserError.
+
 ====
 
 !!! FINAL COMPLIANCE CHECK !!!
