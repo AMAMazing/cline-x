@@ -22,7 +22,7 @@ def read_config():
     config = {}
     config_path = get_config_path()
     old_config_path = os.path.join(APP_PATH, "config.txt")
-    
+
     if os.path.exists(config_path):
         try:
             with open(config_path, 'r') as f:
@@ -40,7 +40,7 @@ def read_config():
                         config[key.strip()] = value.strip().strip('"').strip("'")
         except Exception:
             pass
-            
+
     defaults = {
         'model': 'gemini',
         'theme': 'dark',
@@ -51,11 +51,11 @@ def read_config():
         'tunnel_active': 'False',
         'auth_required': 'False'
     }
-    
+
     for k, v in defaults.items():
         if k not in config:
             config[k] = v
-            
+
     return config
 
 def write_config(config_data):
@@ -64,7 +64,17 @@ def write_config(config_data):
         json.dump(config_data, f, indent=4)
 
 def get_rules_content():
-    """Reads the unified rules from an external file."""
+    """Reads the unified rules from an external file, bypassing for MDTD."""
+    try:
+        from flask import has_request_context, request
+        if has_request_context():
+            client_header = request.headers.get('X-Client', '').strip().lower()
+            client_param = request.args.get('client', '').strip().lower()
+            if client_header == 'mydailytodo' or client_param == 'mydailytodo':
+                return ""
+    except Exception:
+        pass
+
     rules_path = os.path.join(APP_PATH, "unified_rules.txt")
     try:
         with open(rules_path, 'r', encoding='utf-8') as f:

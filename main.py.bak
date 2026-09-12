@@ -65,7 +65,6 @@ terminal_log_level = config.get('terminal_log_level', 'default')
 terminal_alert_level = config.get('terminal_alert_level', 'none')
 tunnel_active = str(config.get('tunnel_active', 'False')).lower() == 'true'
 auth_required = str(config.get('auth_required', 'False')).lower() == 'true'
-fast_mode = str(config.get('fast_mode', 'False')).lower() == 'true'
 
 # --- ROBUST SINGLE INSTANCE & PORT 3001 ENFORCEMENT ---
 LOCK_FILE_PATH = os.path.join(APP_PATH, '.cline_x.lock')
@@ -280,16 +279,7 @@ def handle_llm_interaction(prompt):
     full_prompt = re.sub(r'data:image\/png;base64,[A-Za-z0-9+\/=]+', '', fullpromptbefore)
 
     debug_mode = (terminal_log_level == 'debug')
-    logger.debug(f"Fast mode state: {fast_mode}")
-    return talkto(
-        current_model,
-        full_prompt,
-        image_list,
-        debug=debug_mode,
-        humanize=(not fast_mode),
-        windmouse=(not fast_mode),
-        fast_mode=fast_mode
-    )
+    return talkto(current_model, full_prompt, image_list, debug=debug_mode, humanize=True, windmouse=True)
 
 @app.route('/', methods=['GET'])
 @limiter.exempt
@@ -305,7 +295,6 @@ def home():
                            config=config,
                            tunnel_active=tunnel_active,
                            auth_required=auth_required,
-                           fast_mode=fast_mode,
                            public_url=public_url,
                            api_key=API_KEY)
 
@@ -331,24 +320,6 @@ def model_route():
         except Exception as e:
             logger.error(f"Error switching model: {str(e)}")
             return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/fast-mode', methods=['POST'])
-@limiter.exempt
-def set_fast_mode():
-    global fast_mode, config
-    try:
-        data = request.get_json()
-        if data is None or 'enabled' not in data:
-            return jsonify({'success': False, 'error': 'Invalid request'}), 400
-        new_state = bool(data['enabled'])
-        fast_mode = new_state
-        config['fast_mode'] = str(fast_mode)
-        write_config(config)
-        logger.info(f"Fast mode set to: {fast_mode}")
-        return jsonify({'success': True, 'fast_mode': fast_mode})
-    except Exception as e:
-        logger.error(f"Error setting fast mode: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/notifications', methods=['POST'])
 @limiter.exempt
