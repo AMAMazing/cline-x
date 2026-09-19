@@ -1,13 +1,24 @@
-<!-- Git Diff Modal -->
+<!-- Git Diff & History Modal -->
 <div id="git-diff-modal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-[110] hidden flex items-center justify-center p-2 sm:p-4 md:p-6">
     <div class="relative w-full max-w-5xl h-[92vh] bg-[#111115] border border-gray-700/80 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
-        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-800 bg-[#0d0d10]">
-            <div class="flex items-center gap-2">
+        <!-- Header -->
+        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-800 bg-[#0d0d10] shrink-0">
+            <div class="flex items-center gap-2 sm:gap-3">
                 <span class="font-bold text-sm text-gray-100">Git Source Control</span>
                 <span id="git-branch-name" class="px-2 py-0.5 rounded text-[11px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">main</span>
+
+                <!-- Mode Switcher Tabs -->
+                <div class="flex items-center bg-[#18181f] p-0.5 rounded-xl border border-gray-800 text-xs ml-2">
+                    <button id="tab-git-changes" onclick="switchGitModalMode('changes')" class="px-2.5 py-1 rounded-lg font-medium transition-all bg-gray-700 text-white shadow-sm">
+                        Changes
+                    </button>
+                    <button id="tab-git-history" onclick="switchGitModalMode('history')" class="px-2.5 py-1 rounded-lg font-medium transition-all text-gray-400 hover:text-gray-200">
+                        History
+                    </button>
+                </div>
             </div>
             <div class="flex items-center gap-1.5">
-                <button onclick="refreshGitAll()" class="p-1.5 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors" title="Refresh">
+                <button onclick="refreshGitCurrentView()" class="p-1.5 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors" title="Refresh">
                     <svg id="git-refresh-icon" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
                 </button>
                 <button onclick="closeGitDiffModal()" class="p-1.5 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors">
@@ -16,21 +27,43 @@
             </div>
         </div>
 
+        <!-- Main Body Container -->
         <div class="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden bg-[#0a0a0c]">
-            <div class="w-full md:w-80 border-b md:border-b-0 md:border-r border-gray-800 flex flex-col shrink-0 bg-[#0e0e12]">
-                <div class="p-3 border-b border-gray-800 flex flex-col gap-2">
-                    <textarea id="git-commit-message-input" placeholder="Commit message..." class="w-full bg-[#18181f] border border-gray-700 rounded-xl p-2 text-xs text-gray-100 resize-none h-14 focus:outline-none focus:border-blue-500"></textarea>
-                    <button id="btn-git-commit-push" onclick="handleCommitAndPush()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-1.5 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5">
-                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
-                        <span>Commit & Push</span>
-                    </button>
-                    <div id="commit-feedback-msg" class="hidden text-[11px] p-1.5 rounded-lg"></div>
+            <!-- Left Panel (Changes or Commit History list) -->
+            <div class="w-full md:w-80 border-b md:border-b-0 md:border-r border-gray-800 flex flex-col shrink-0 bg-[#0e0e12] max-h-[40vh] md:max-h-full">
+                <!-- Mode: Changes Controls -->
+                <div id="git-changes-panel" class="flex flex-col h-full min-h-0">
+                    <div class="p-3 border-b border-gray-800 flex flex-col gap-2 shrink-0">
+                        <textarea id="git-commit-message-input" placeholder="Commit message..." class="w-full bg-[#18181f] border border-gray-700 rounded-xl p-2 text-xs text-gray-100 resize-none h-14 focus:outline-none focus:border-blue-500"></textarea>
+                        <button id="btn-git-commit-push" onclick="handleCommitAndPush()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-1.5 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5">
+                            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+                            <span>Commit & Push</span>
+                        </button>
+                        <div id="commit-feedback-msg" class="hidden text-[11px] p-1.5 rounded-lg"></div>
+                    </div>
+                    <div id="diff-file-list" class="flex-1 overflow-y-auto divide-y divide-gray-800/40 p-1"></div>
                 </div>
-                <div id="diff-file-list" class="flex-1 overflow-y-auto divide-y divide-gray-800/40 p-1"></div>
+
+                <!-- Mode: History List -->
+                <div id="git-history-panel" class="hidden flex-1 flex flex-col min-h-0">
+                    <div class="px-3 py-2 border-b border-gray-800 text-[11px] font-semibold text-gray-400 uppercase tracking-wider shrink-0">
+                        Past Commits
+                    </div>
+                    <div id="git-history-list" class="flex-1 overflow-y-auto divide-y divide-gray-800/40 p-1">
+                        <div class="p-4 text-center text-xs text-gray-500">Loading commit history...</div>
+                    </div>
+                </div>
             </div>
+
+            <!-- Right Panel: Diff / Commit Details Area -->
             <div class="flex-1 flex flex-col min-h-0 bg-[#0a0a0c] overflow-hidden">
-                <div class="px-4 py-2 bg-[#0e0e12] border-b border-gray-800 text-xs font-mono text-gray-300" id="selected-file-name">Select a file to inspect diff</div>
-                <div class="flex-1 overflow-auto p-3 font-mono text-xs text-gray-300" id="diff-content-area"></div>
+                <div class="px-4 py-2 bg-[#0e0e12] border-b border-gray-800 text-xs font-mono text-gray-300 flex items-center justify-between" id="selected-diff-header">
+                    <span id="selected-file-name" class="truncate">Select a file or commit to inspect</span>
+                    <span id="selected-diff-meta" class="text-gray-500 text-[11px] shrink-0 font-sans"></span>
+                </div>
+                <div class="flex-1 overflow-auto p-3 font-mono text-xs text-gray-300 select-text" id="diff-content-area">
+                    <div class="p-6 text-center text-gray-500 text-xs">No item selected.</div>
+                </div>
             </div>
         </div>
     </div>

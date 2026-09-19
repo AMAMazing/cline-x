@@ -39,7 +39,7 @@ from modules.automation_utils import process_optimisewait_message
 from modules.pomodoro_manager import record_sprint_completion, pomodoro_state
 import modules.queue_manager as queue_manager
 from modules.auth_utils import require_api_key, API_KEY
-from modules.project_routes import project_bp
+from modules.project_routes import project_bp, run_git_cmd
 from modules.pomodoro_routes import pomodoro_bp
 from modules.cline_cli_utils import (
     find_cline_executable,
@@ -110,7 +110,7 @@ def get_listening_pids_on_port(port: int) -> List[int]:
                 line = line.strip()
                 if not line:
                     continue
-                match = re.search(rf':{port}\s+.*(?:LISTENING|ESTABLISHED)\s+(\d+)', line, re.IGNORECASE)
+                match = re.search(rf':{port}\s+.*(?:LISTENING|ESTABLISHED)\s+(\\d+)', line, re.IGNORECASE)
                 if match:
                     found_pid = int(match.group(1))
                     if found_pid > 0 and found_pid != os.getpid() and found_pid not in pids:
@@ -717,6 +717,32 @@ def api_screen():
     except Exception as e:
         logger.error(f"Screenshot error: {e}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/git_commit_diff', methods=['GET'])
+@limiter.exempt
+def api_git_commit_diff():
+    try:
+        project_path = request.args.get('path')
+        commit_hash = request.args.get('hash')
+        if not project_path or not commit_hash or not os.path.isdir(project_path):
+            return jsonify({'status': 'error', 'message': 'Invalid parameters'}), 400
+
+        is_git, _, _ = run_git_cmd(project_path, ['rev-parse', '--is-inside-work-tree'])
+        if not is_git:
+            return jsonify({'status': 'error', 'message': 'Not a git repository'}), 400
+
+        success, diff_out, err = run_git_cmd(project_path, ['show', commit_hash])
+        if not success:
+            return jsonify({'status': 'error', 'message': err or 'Failed to get commit diff'}), 500
+
+        return jsonify({
+            'status': 'success',
+            'hash': commit_hash,
+            'diff': diff_out
+        })
+    except Exception as e:
+        logger.error(f"Error fetching commit diff: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 # --- Live Cline CLI Logs & Control Endpoints ---
 @app.route('/api/cli_logs', methods=['GET'])
