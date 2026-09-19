@@ -104,6 +104,43 @@
     <!-- Git Diff Modal Module -->
     {% include 'chat_components/git_diff_modal.html' %}
 
+    <!-- Live Screen Viewer Modal -->
+    <div id="screen-viewer-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+        <div class="bg-[#101012] border border-gray-700/60 rounded-2xl w-11/12 max-w-5xl h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-gray-800/80 bg-[#161619]">
+                <div class="flex items-center gap-2">
+                    <div class="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" id="screen-status-indicator"></div>
+                    <h3 class="text-gray-200 font-semibold text-sm">Live Screen Viewer</h3>
+                </div>
+                <button onclick="toggleScreenViewer()" class="text-gray-400 hover:text-white transition-colors">
+                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="flex-1 bg-black overflow-hidden relative flex items-center justify-center p-2">
+                <img id="screen-viewer-img" class="max-w-full max-h-full object-contain" src="" alt="Screen Feed" />
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let screenViewerInterval = null;
+        function toggleScreenViewer() {
+            const modal = document.getElementById('screen-viewer-modal');
+            modal.classList.toggle('hidden');
+            if (!modal.classList.contains('hidden')) {
+                updateScreenImage();
+                screenViewerInterval = setInterval(updateScreenImage, 1000);
+            } else {
+                if (screenViewerInterval) clearInterval(screenViewerInterval);
+                screenViewerInterval = null;
+            }
+        }
+        function updateScreenImage() {
+            const img = document.getElementById('screen-viewer-img');
+            img.src = '/api/screen?t=' + new Date().getTime();
+        }
+    </script>
+
     <!-- Modular JavaScript Logic -->
     {% include 'chat_components/chat_scripts.html' %}
 </body>

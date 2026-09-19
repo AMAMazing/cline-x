@@ -22,6 +22,8 @@ import atexit
 import signal
 import ctypes
 from typing import Union, List, Dict
+import io
+from PIL import ImageGrab, Image
 
 from talktollm import talkto
 
@@ -698,6 +700,23 @@ def batch_status():
         'system_busy': queue_manager.state['system_busy'],
         'last_stdout_chunk': queue_manager.state.get('last_stdout_chunk', '')
     })
+
+@app.route('/api/screen', methods=['GET'])
+@limiter.exempt
+def api_screen():
+    try:
+        img = ImageGrab.grab()
+        max_size = (1024, 768)
+        img.thumbnail(max_size)
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+        img_io = io.BytesIO()
+        img.save(img_io, 'JPEG', quality=40)
+        img_io.seek(0)
+        return send_file(img_io, mimetype='image/jpeg')
+    except Exception as e:
+        logger.error(f"Screenshot error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 # --- Live Cline CLI Logs & Control Endpoints ---
 @app.route('/api/cli_logs', methods=['GET'])
