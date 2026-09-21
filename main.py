@@ -3,6 +3,7 @@ from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import time
+import optimisewait
 from time import sleep
 import os
 import logging
@@ -110,7 +111,7 @@ def get_listening_pids_on_port(port: int) -> List[int]:
                 line = line.strip()
                 if not line:
                     continue
-                match = re.search(rf':{port}\s+.*(?:LISTENING|ESTABLISHED)\s+(\\d+)', line, re.IGNORECASE)
+                match = re.search(rf':{port}\s+.*(?:LISTENING|ESTABLISHED)\s+(\d+)', line, re.IGNORECASE)
                 if match:
                     found_pid = int(match.group(1))
                     if found_pid > 0 and found_pid != os.getpid() and found_pid not in pids:
@@ -283,15 +284,77 @@ def handle_llm_interaction(prompt):
 
     debug_mode = (terminal_log_level == 'debug')
     logger.debug(f"Fast mode state: {fast_mode}")
-    return talkto(
-        current_model,
-        full_prompt,
-        image_list,
-        debug=debug_mode,
-        humanize=(not fast_mode),
-        windmouse=(not fast_mode),
-        fast_mode=fast_mode
-    )
+    
+    # --- Background Error Monitoring ---
+    monitor_stop_event = threading.Event()
+    
+    def error_monitor():
+        error_path = os.path.join(APP_PATH, 'linkimages')
+        while not monitor_stop_event.is_set():
+            try:
+                result = optimisewait.optimiseWait('error', dontwait=True, autopath=error_path, clicks=0)
+                if result and result.get('found'):
+                    loc = result.get('location')
+                    if loc:
+                        x, y = None, None
+                        try:
+                            if hasattr(loc, 'left') and hasattr(loc, 'width'):
+                                x = loc.left + loc.width / 2
+                                y = loc.top + loc.height / 2
+                            else:
+                                x, y = loc
+                        except Exception:
+                            pass
+                            
+                        if x is not None and y is not None:
+                            try:
+                                optimisewait.humancircles(duration=3.0, start_x=x, start_y=y)
+                            except Exception:
+                                pass
+                        
+                        ntfy_topic = config.get('ntfy_topic', '')
+                        if ntfy_topic and ntfy_notification_level != 'none':
+                            try:
+                                def safe_add_chat(role, text):
+                                    try:
+                                        add_chat_message(role, text)
+                                    except Exception:
+                                        pass
+                                send_ntfy_notification(
+                                    topic=ntfy_topic,
+                                    simple_title="Error Detected",
+                                    full_content="An error message was found on screen.",
+                                    add_chat_message_func=safe_add_chat,
+                                    tags="warning"
+                                )
+                            except Exception as e:
+                                logger.error(f"Failed to send error notification: {e}")
+            except Exception:
+                pass
+            
+            # Wait short duration before checking again to prevent CPU overload
+            for _ in range(5):
+                if monitor_stop_event.is_set():
+                    break
+                time.sleep(0.1)
+
+    monitor_thread = threading.Thread(target=error_monitor, daemon=True)
+    monitor_thread.start()
+
+    try:
+        response = talkto(
+            current_model,
+            full_prompt,
+            image_list,
+            debug=debug_mode,
+            humanize=(not fast_mode),
+            windmouse=(not fast_mode),
+            fast_mode=fast_mode
+        )
+    finally:
+        monitor_stop_event.set()
+        
+    return response
 
 @app.route('/', methods=['GET'])
 @limiter.exempt
