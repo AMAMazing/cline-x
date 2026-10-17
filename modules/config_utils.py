@@ -49,7 +49,8 @@ def read_config():
         'terminal_log_level': 'default',
         'terminal_alert_level': 'none',
         'tunnel_active': 'False',
-        'auth_required': 'False'
+        'auth_required': 'False',
+        'headless_mode': 'False'
     }
 
     for k, v in defaults.items():

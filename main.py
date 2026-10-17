@@ -26,6 +26,55 @@ from typing import Union, List, Dict
 import io
 from PIL import ImageGrab, Image
 
+# Ensure working directory is always the project root so relative paths in modules never fail
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+os.chdir(SCRIPT_DIR)
+
+IS_HEADLESS_WORKER = "--headless-worker" in sys.argv
+HEADLESS_LOG_PATH = os.path.join(SCRIPT_DIR, "clinex_headless.log")
+
+# --- FORCE ALL CHILD PROCESSES (ngrok.exe, git, etc.) TO BE 100% WINDOWLESS IN HEADLESS MODE ---
+_ORIGINAL_POPEN = subprocess.Popen
+
+if IS_HEADLESS_WORKER and os.name == 'nt':
+    class _HeadlessPopen(_ORIGINAL_POPEN):
+        def __init__(self, *args, **kwargs):
+            # Unless a caller explicitly asked for a new console (e.g. visible_terminal=True),
+            # force CREATE_NO_WINDOW and SW_HIDE on every child process (including pyngrok/ngrok.exe).
+            flags = kwargs.get('creationflags', 0)
+            if not (flags & subprocess.CREATE_NEW_CONSOLE):
+                kwargs['creationflags'] = flags | subprocess.CREATE_NO_WINDOW
+                
+                startupinfo = kwargs.get('startupinfo')
+                if startupinfo is None:
+                    startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = subprocess.SW_HIDE
+                kwargs['startupinfo'] = startupinfo
+            super().__init__(*args, **kwargs)
+
+    subprocess.Popen = _HeadlessPopen
+
+# Fix for Windows Unicode Output & Headless Stream Safety
+if IS_HEADLESS_WORKER or sys.stdout is None or sys.stderr is None:
+    try:
+        _log_stream = open(HEADLESS_LOG_PATH, "a", encoding="utf-8", buffering=1)
+        sys.stdout = _log_stream
+        sys.stderr = _log_stream
+    except Exception:
+        sys.stdout = open(os.devnull, "w")
+        sys.stderr = open(os.devnull, "w")
+    try:
+        sys.stdin = open(os.devnull, "r")
+    except Exception:
+        pass
+elif sys.platform.startswith('win'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except AttributeError:
+        pass
+
 from talktollm import talkto
 
 # --- Import Local Modules ---
@@ -50,13 +99,6 @@ from modules.cline_cli_utils import (
     is_cline_available
 )
 
-# Fix for Windows Unicode Output
-if sys.platform.startswith('win'):
-    try:
-        sys.stdout.reconfigure(encoding='utf-8')
-    except AttributeError:
-        pass
-
 load_dotenv(dotenv_path=DOTENV_PATH)
 
 # Load initial configuration
@@ -69,6 +111,7 @@ terminal_alert_level = config.get('terminal_alert_level', 'none')
 tunnel_active = str(config.get('tunnel_active', 'False')).lower() == 'true'
 auth_required = str(config.get('auth_required', 'False')).lower() == 'true'
 fast_mode = str(config.get('fast_mode', 'False')).lower() == 'true'
+headless_mode = str(config.get('headless_mode', 'False')).lower() == 'true'
 
 # --- ROBUST SINGLE INSTANCE & PORT 3001 ENFORCEMENT ---
 LOCK_FILE_PATH = os.path.join(APP_PATH, '.cline_x.lock')
@@ -80,7 +123,10 @@ def is_pid_alive(pid: int) -> bool:
     if os.name == 'nt':
         try:
             cmd = f'tasklist /FI "PID eq {pid}" /FO CSV /NH'
-            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode('utf-8', errors='ignore')
+            output = subprocess.check_output(
+                cmd, shell=True, stderr=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            ).decode('utf-8', errors='ignore')
             return f'"{pid}"' in output or str(pid) in output
         except Exception:
             return False
@@ -96,7 +142,13 @@ def terminate_pid_tree(pid: int):
         return
     try:
         if os.name == 'nt':
-            subprocess.run(f'taskkill /F /T /PID {pid}', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(
+                f'taskkill /F /T /PID {pid}',
+                shell=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
         else:
             os.kill(pid, signal.SIGKILL)
     except Exception:
@@ -106,7 +158,10 @@ def get_listening_pids_on_port(port: int) -> List[int]:
     pids = []
     if os.name == 'nt':
         try:
-            output = subprocess.check_output('netstat -ano -p tcp', shell=True, stderr=subprocess.DEVNULL).decode('utf-8', errors='ignore')
+            output = subprocess.check_output(
+                'netstat -ano -p tcp', shell=True, stderr=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            ).decode('utf-8', errors='ignore')
             for line in output.splitlines():
                 line = line.strip()
                 if not line:
@@ -151,9 +206,8 @@ def cleanup_lock_and_mutex():
         except Exception:
             pass
 
-def enforce_single_instance(port: int = 3001):
-    global _named_mutex_handle
-
+def kill_existing_instances(port: int = 3001):
+    """Kills any previously running Cline-X instance and orphaned ngrok.exe processes."""
     if os.path.exists(LOCK_FILE_PATH):
         try:
             with open(LOCK_FILE_PATH, 'r') as f:
@@ -161,11 +215,34 @@ def enforce_single_instance(port: int = 3001):
             if old_pid_str.isdigit():
                 old_pid = int(old_pid_str)
                 if old_pid != os.getpid() and is_pid_alive(old_pid):
-                    print(f"{colorama.Fore.YELLOW}[Single-Instance] Terminating previous background instance (PID: {old_pid})...{colorama.Style.RESET_ALL}")
+                    print(f"{colorama.Fore.YELLOW}[Single-Instance] Terminating previous instance (PID: {old_pid})...{colorama.Style.RESET_ALL}")
                     terminate_pid_tree(old_pid)
-                    time.sleep(0.5)
+                    time.sleep(0.4)
         except Exception:
             pass
+
+    occupying_pids = get_listening_pids_on_port(port)
+    for p in occupying_pids:
+        print(f"{colorama.Fore.YELLOW}[Single-Instance] Port {port} is occupied by PID {p}. Freeing port...{colorama.Style.RESET_ALL}")
+        terminate_pid_tree(p)
+
+    # Also kill any lingering ngrok.exe from the previous session so a new tunnel starts cleanly
+    if os.name == 'nt':
+        try:
+            subprocess.run(
+                'taskkill /F /IM ngrok.exe',
+                shell=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
+        except Exception:
+            pass
+
+    if not wait_for_port_freed(port, max_wait_sec=3.0):
+        for p in get_listening_pids_on_port(port):
+            terminate_pid_tree(p)
+        wait_for_port_freed(port, max_wait_sec=2.0)
 
     occupying_pids = get_listening_pids_on_port(port)
     for p in occupying_pids:
@@ -177,6 +254,8 @@ def enforce_single_instance(port: int = 3001):
             terminate_pid_tree(p)
         wait_for_port_freed(port, max_wait_sec=2.0)
 
+def register_current_instance():
+    global _named_mutex_handle
     if os.name == 'nt':
         try:
             mutex_name = "Local\\ClineX_FlaskServer_SingleInstance_3001"
@@ -190,6 +269,60 @@ def enforce_single_instance(port: int = 3001):
         atexit.register(cleanup_lock_and_mutex)
     except Exception:
         pass
+
+def spawn_instance(headless: bool):
+    """Spawns a fresh Cline-X process in either headless or visible window mode."""
+    script_path = os.path.abspath(__file__)
+    if os.name == 'nt':
+        if headless:
+            # IMPORTANT: Use CREATE_NO_WINDOW *without* DETACHED_PROCESS!
+            # CREATE_NO_WINDOW creates an invisible console buffer that child processes
+            # (like ngrok.exe, git.exe, cline) inherit silently without popping up windows.
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
+
+            _ORIGINAL_POPEN(
+                [sys.executable, script_path, "--headless-worker"],
+                cwd=APP_PATH,
+                creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP,
+                startupinfo=startupinfo,
+                close_fds=True
+            )
+        else:
+            # Spawn in a visible console window
+            _ORIGINAL_POPEN(
+                [sys.executable, script_path, "--window-worker"],
+                cwd=APP_PATH,
+                creationflags=subprocess.CREATE_NEW_CONSOLE
+            )
+    else:
+        cmd = [sys.executable, script_path, "--headless-worker" if headless else "--window-worker"]
+        _ORIGINAL_POPEN(cmd, cwd=APP_PATH, start_new_session=True)
+
+def self_terminate_completely():
+    """100% kills the current server and its entire child process tree."""
+    try:
+        terminate_active_cline()
+    except Exception:
+        pass
+    try:
+        if 'ngrok_tunnel' in globals() and ngrok_tunnel:
+            ngrok.disconnect(ngrok_tunnel.public_url)
+        ngrok.kill()
+    except Exception:
+        pass
+    cleanup_lock_and_mutex()
+    if os.name == 'nt':
+        _ORIGINAL_POPEN(
+            f'taskkill /F /IM ngrok.exe & taskkill /F /T /PID {os.getpid()}',
+            shell=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NO_WINDOW
+        )
+        time.sleep(0.2)
+    os._exit(0)
 
 # --- LOGGING SETUP ---
 class CustomFormatter(logging.Formatter):
@@ -211,7 +344,7 @@ class CustomFormatter(logging.Formatter):
                 return super().format(record)
             return ''
 
-handler = logging.StreamHandler()
+handler = logging.StreamHandler(sys.stdout)
 handler.setFormatter(CustomFormatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
 logger = logging.getLogger(__name__)
 logger.addHandler(handler)
@@ -332,7 +465,6 @@ def handle_llm_interaction(prompt):
             except Exception:
                 pass
             
-            # Wait short duration before checking again to prevent CPU overload
             for _ in range(5):
                 if monitor_stop_event.is_set():
                     break
@@ -371,8 +503,57 @@ def home():
                            tunnel_active=tunnel_active,
                            auth_required=auth_required,
                            fast_mode=fast_mode,
+                           headless_mode=headless_mode,
                            public_url=public_url,
                            api_key=API_KEY)
+
+@app.route('/window-mode', methods=['POST'])
+@limiter.exempt
+def set_window_mode():
+    global headless_mode, config
+    try:
+        data = request.get_json()
+        if data is None or 'headless' not in data:
+            return jsonify({'success': False, 'error': 'Invalid request'}), 400
+        
+        new_headless = bool(data['headless'])
+        headless_mode = new_headless
+        config['headless_mode'] = str(headless_mode)
+        write_config(config)
+        logger.info(f"Headless mode set to: {headless_mode}")
+
+        # If the running mode doesn't match the new mode, transition immediately
+        currently_headless = IS_HEADLESS_WORKER
+        if new_headless != currently_headless:
+            def transition_mode():
+                time.sleep(0.4)
+                try:
+                    terminate_active_cline()
+                except Exception:
+                    pass
+                cleanup_lock_and_mutex()
+                spawn_instance(headless=new_headless)
+                time.sleep(0.2)
+                self_terminate_completely()
+
+            threading.Thread(target=transition_mode, daemon=True).start()
+            return jsonify({'success': True, 'headless_mode': headless_mode, 'restarting': True})
+
+        return jsonify({'success': True, 'headless_mode': headless_mode, 'restarting': False})
+    except Exception as e:
+        logger.error(f"Error setting window mode: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/shutdown', methods=['POST'])
+@limiter.exempt
+def shutdown_server():
+    try:
+        logger.info("Complete self-kill command received. Terminating server and all subprocesses...")
+        threading.Thread(target=lambda: (time.sleep(0.3), self_terminate_completely()), daemon=True).start()
+        return jsonify({'success': True, 'message': 'Cline-X is completely shutting down.'})
+    except Exception as e:
+        logger.error(f"Shutdown failed: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/model', methods=['GET', 'POST'])
 @limiter.exempt
@@ -902,35 +1083,35 @@ def get_messages():
         return jsonify(chat_history)
     return jsonify(msgs)
 
-@app.route('/restart', methods=['GET'])
+@app.route('/restart', methods=['GET', 'POST'])
 @limiter.exempt
 def restart_server():
     try:
-        logger.info("Restart command received. Spawning new window and exiting...")
-        terminate_active_cline()
+        logger.info("Restart command received. Respawning in configured mode and exiting...")
         def perform_restart():
-            time.sleep(0.5)
-            script_path = os.path.abspath(sys.argv[0])
-            
-            if os.name == 'nt':
-                command = f'timeout /t 2 /nobreak >nul & "{sys.executable}" "{script_path}"'
-                subprocess.Popen(command, shell=True, creationflags=subprocess.CREATE_NEW_CONSOLE)
-            else:
-                command = f'sleep 2 && "{sys.executable}" "{script_path}"'
-                subprocess.Popen(command, shell=True)
-            
-            os._exit(0)
+            time.sleep(0.4)
+            try:
+                terminate_active_cline()
+            except Exception:
+                pass
+            cleanup_lock_and_mutex()
+            spawn_instance(headless=headless_mode)
+            time.sleep(0.2)
+            self_terminate_completely()
 
         threading.Thread(target=perform_restart, daemon=True).start()
         
+        if request.method == 'POST':
+            return jsonify({'success': True, 'headless_mode': headless_mode})
+
         return """
         <html>
             <body style='background:#111;color:#eee;font-family:sans-serif;'>
-                <h2 style='text-align:center;margin-top:20%;'>Restarting...</h2>
-                <p style='text-align:center;color:#888;'>Opening a new window and terminating the current session.</p>
-                <p style='text-align:center;color:#555;'>This page will auto-refresh in 5 seconds.</p>
+                <h2 style='text-align:center;margin-top:20%;'>Restarting Cline-X...</h2>
+                <p style='text-align:center;color:#888;'>Respawning session and terminating old instance.</p>
+                <p style='text-align:center;color:#555;'>This page will auto-refresh in 3 seconds.</p>
                 <script>
-                    setTimeout(() => window.location.href='/', 5000);
+                    setTimeout(() => window.location.href='/', 3000);
                 </script>
             </body>
         </html>
@@ -997,12 +1178,28 @@ def set_timeout():
 ngrok_tunnel = None
 
 if __name__ == '__main__':
-    colorama.init(autoreset=True)
-    enforce_single_instance(port=3001)
+    if not IS_HEADLESS_WORKER:
+        colorama.init(autoreset=True)
+    else:
+        colorama.init(autoreset=True, strip=True, convert=False)
+
+    # 1. Always 100% kill any existing instance first
+    kill_existing_instances(port=3001)
+
+    # 2. If user launched normally via `python.exe main.py` and headless_mode is active,
+    # spawn the headless background worker and immediately exit this console process
+    # so zero windows stay open (not even minimized).
+    if headless_mode and not IS_HEADLESS_WORKER and "--window-worker" not in sys.argv:
+        print(f"{colorama.Fore.GREEN}[Headless Mode] Launching Cline-X in background (no window)...{colorama.Style.RESET_ALL}")
+        spawn_instance(headless=True)
+        os._exit(0)
+
+    # 3. Register PID lock & mutex for this active worker
+    register_current_instance()
 
     if tunnel_active:
         ngrok_authtoken = os.getenv("NGROK_AUTHTOKEN")
-        if not ngrok_authtoken:
+        if not ngrok_authtoken and not IS_HEADLESS_WORKER:
             print(f"{colorama.Fore.RED}NGROK_AUTHTOKEN not found in .env file.{colorama.Style.RESET_ALL}")
             ngrok_authtoken = input("Please enter your ngrok authtoken: ").strip()
             if ngrok_authtoken:
@@ -1011,19 +1208,20 @@ if __name__ == '__main__':
             else:
                 logger.error("No NGROK_AUTHTOKEN provided. Exiting.")
                 exit()
-        try:
-            ngrok.set_auth_token(ngrok_authtoken)
-            ngrok_domain = os.getenv("NGROK_DOMAIN")
-            if ngrok_domain:
-                ngrok_tunnel = ngrok.connect(3001, domain=ngrok_domain)
-            else:
-                ngrok_tunnel = ngrok.connect(3001)
+        if ngrok_authtoken:
+            try:
+                ngrok.set_auth_token(ngrok_authtoken)
+                ngrok_domain = os.getenv("NGROK_DOMAIN")
+                if ngrok_domain:
+                    ngrok_tunnel = ngrok.connect(3001, domain=ngrok_domain)
+                else:
+                    ngrok_tunnel = ngrok.connect(3001)
 
-            logger.info(f"ngrok tunnel established: {ngrok_tunnel.public_url}")
-        except Exception as e:
-            logger.error(f"Failed to start ngrok: {e}")
-            print(f"{colorama.Fore.RED}Failed to start ngrok. Remote access will not be available.{colorama.Style.RESET_ALL}")
-            tunnel_active = False
+                logger.info(f"ngrok tunnel established: {ngrok_tunnel.public_url}")
+            except Exception as e:
+                logger.error(f"Failed to start ngrok: {e}")
+                print(f"{colorama.Fore.RED}Failed to start ngrok. Remote access will not be available.{colorama.Style.RESET_ALL}")
+                tunnel_active = False
 
     print_startup_banner(
         current_model=current_model,
@@ -1042,5 +1240,6 @@ if __name__ == '__main__':
         app.run(host="0.0.0.0", port=3001)
     except Exception as e:
         logger.error(f"Failed to start server: {e}")
-        print(f"{colorama.Fore.RED}An error occurred: {e}{colorama.Style.RESET_ALL}")
-        input("Press Enter to exit.")
+        if not IS_HEADLESS_WORKER:
+            print(f"{colorama.Fore.RED}An error occurred: {e}{colorama.Style.RESET_ALL}")
+            input("Press Enter to exit.")
