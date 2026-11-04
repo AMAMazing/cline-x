@@ -241,6 +241,10 @@ Use CLI (`type <file>` on Windows) by default when reading entire files in a sin
 
 ====
 
+Btw I forgot to mention this above so I'll mention this here, the no ``` includes plan mode respond and thinking. So no ``` within plan mode response, no ``` in thinking.
+
+====
+
 !!! FINAL COMPLIANCE CHECK !!!
 BEFORE SUBMITTING, YOU MUST VERIFY:
 1. **THE CONTAINER RULE**: Is your ENTIRE response wrapped in ```? No text is allowed outside.
