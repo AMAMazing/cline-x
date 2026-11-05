@@ -566,7 +566,18 @@ def model_route():
             clear_previous_alert(alert_state)
             data = request.get_json()
             new_model = data['model'].lower()
-            if new_model not in ['deepseek', 'gemini', 'aistudio', 'aistudio_flash', 'gemini-3.1-flash-lite-preview']:
+            if new_model not in [
+                'deepseek',
+                'gemini',
+                'aistudio',
+                'aistudio_flash',
+                'gemini-3.1-flash-lite-preview',
+                'aistudio-argon',
+                'gemini-4-argon',
+                'aistudio-pro',
+                'aistudio-flash',
+                'aistudio-flash-lite'
+            ]:
                 return jsonify({'success': False, 'error': 'Invalid model'}), 400
             
             current_model = new_model
