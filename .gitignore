@@ -25,3 +25,5 @@ build.bat
 *.json
 clinex_config.json
 *.lock
+
+__pycache__

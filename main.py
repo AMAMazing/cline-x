@@ -574,6 +574,8 @@ def model_route():
                 'gemini-3.1-flash-lite-preview',
                 'aistudio-argon',
                 'gemini-4-argon',
+                'aistudio-hydrogen',
+                'gemini-4-hydrogen',
                 'aistudio-pro',
                 'aistudio-flash',
                 'aistudio-flash-lite'
